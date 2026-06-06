@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EDIS Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&family=Noto+Sans+TC:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --white:   #F4F5F2;
+  --steel:   #8AA1AD;
+  --mauve:   #B1ABB6;
+  --warm:    #968C91;
+  --navy:    #437096;
+  --navy-dk: #335a7a;
+  --navy-lt: #5a8aab;
+
+  --bg:      #eef0ed;
+  --surface: #F4F5F2;
+  --card:    #ffffff;
+  --border:  #dde0de;
+  --text:    #2d3340;
+  --muted:   #8a939e;
+  --sidebar-w: 220px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'DM Sans', 'Noto Sans TC', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  min-height: 100vh;
+}
+
+/* ── Sidebar ── */
+.sidebar {
+  width: var(--sidebar-w);
+  background: var(--navy);
+  min-height: 100vh;
+  position: fixed;
+  top: 0; left: 0;
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+}
+
+.sidebar-brand {
+  padding: 28px 24px 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px; height: 38px;
+  background: rgba(255,255,255,0.15);
+  border-radius: 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: white;
+  margin-bottom: 10px;
+}
+
+.brand-name {
+  font-size: 17px;
+  font-weight: 600;
+  color: white;
+  letter-spacing: 0.3px;
+}
+
+.brand-sub {
+  font-size: 10px;
+  color: rgba(255,255,255,0.5);
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+.sidebar-nav {
+  flex: 1;
+  padding: 16px 0;
+}
+
+.nav-section {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: rgba(255,255,255,0.35);
+  padding: 16px 24px 6px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 24px;
+  color: rgba(255,255,255,0.65);
+  font-size: 13px;
+  font-weight: 400;
+  cursor: pointer;
+  transition: all 0.15s;
+  border-left: 3px solid transparent;
+  text-decoration: none;
+}
+
+.nav-item:hover { color: white; background: rgba(255,255,255,0.08); }
+
+.nav-item.active {
+  color: white;
+  background: rgba(255,255,255,0.12);
+  border-left-color: var(--white);
+  font-weight: 500;
+}
+
+.nav-icon { width: 16px; opacity: 0.8; font-style: normal; }
+
+.sidebar-footer {
+  padding: 16px 24px;
+  border-top: 1px solid rgba(255,255,255,0.1);
+  font-size: 11px;
+  color: rgba(255,255,255,0.4);
+}
+
+/* ── Main area ── */
+.main {
+  margin-left: var(--sidebar-w);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* ── Topbar ── */
+.topbar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 32px;
+  height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.topbar-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.role-switch {
+  display: flex;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.role-btn {
+  padding: 5px 16px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.role-btn.active {
+  background: var(--navy);
+  color: white;
+}
+
+.role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.badge-viewer  { background: #f0f2f4; color: var(--muted); }
+.badge-manager { background: rgba(67,112,150,0.12); color: var(--navy); }
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+}
+
+.dot { width: 6px; height: 6px; border-radius: 50%; }
+.dot-green { background: #5cb85c; animation: blink 2s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+/* ── Content ── */
+.content {
+  padding: 28px 32px;
+  flex: 1;
+}
+
+.page-header {
+  margin-bottom: 24px;
+}
+
+.page-title {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.page-sub {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+/* ── KPI Cards ── */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.kpi-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  transition: box-shadow 0.2s;
+}
+
+.kpi-card:hover { box-shadow: 0 4px 16px rgba(67,112,150,0.1); }
+
+.kpi-icon-wrap {
+  width: 52px; height: 52px;
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.icon-steel  { background: rgba(138,161,173,0.15); }
+.icon-navy   { background: rgba(67,112,150,0.12); }
+.icon-warm   { background: rgba(150,140,145,0.15); }
+.icon-mauve  { background: rgba(177,171,182,0.2); }
+
+.kpi-info { flex: 1; }
+
+.kpi-label {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 400;
+  margin-bottom: 4px;
+}
+
+.kpi-value {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1;
+}
+
+.kpi-value.navy  { color: var(--navy); }
+.kpi-value.steel { color: var(--steel); }
+.kpi-value.warm  { color: var(--warm); }
+
+.kpi-change {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* ── Two-col layout ── */
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 16px;
+}
+
+/* ── Panel ── */
+.panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.panel-head {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.panel-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.panel-subtitle {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 1px;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 500;
+  font-family: 'DM Mono', monospace;
+}
+
+.tag-count { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+
+/* ── Risk table ── */
+.risk-table { width: 100%; border-collapse: collapse; }
+
+.risk-table th {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--muted);
+  font-weight: 500;
+  padding: 10px 16px;
+  text-align: left;
+  background: #fafbfa;
+  border-bottom: 1px solid var(--border);
+  font-family: 'DM Mono', monospace;
+}
+
+.risk-table td {
+  padding: 11px 16px;
+  font-size: 12.5px;
+  border-bottom: 1px solid #f0f2f0;
+  color: var(--text);
+}
+
+.risk-table tr:last-child td { border-bottom: none; }
+.risk-table tr:hover td { background: #f8f9f8; }
+
+.order-id {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--navy);
+}
+
+.risk-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.r-high { background: #fdecea; color: #c0392b; }
+.r-med  { background: #fef6e4; color: #d68910; }
+.r-low  { background: #eaf4ea; color: #27ae60; }
+
+.prob-wrap { display: flex; align-items: center; gap: 8px; }
+.prob-bar  { width: 56px; height: 5px; background: #eef0ee; border-radius: 3px; overflow: hidden; }
+.prob-fill { height: 100%; border-radius: 3px; }
+.fill-high { background: linear-gradient(90deg, #e67e73, #c0392b); }
+.fill-med  { background: linear-gradient(90deg, #f0c070, #d68910); }
+.fill-low  { background: linear-gradient(90deg, #82c882, #27ae60); }
+.prob-val  { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); }
+
+.table-scroll { max-height: 380px; overflow-y: auto; }
+.table-scroll::-webkit-scrollbar { width: 3px; }
+.table-scroll::-webkit-scrollbar-track { background: transparent; }
+.table-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ── Optimize panel ── */
+.opt-body { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+
+.field-label {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 500;
+  margin-bottom: 6px;
+  display: block;
+}
+
+.budget-input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 9px 14px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.budget-input:focus { border-color: var(--navy); }
+
+.run-btn {
+  width: 100%;
+  padding: 10px;
+  background: var(--navy);
+  color: white;
+  border: none;
+  border-radius: 7px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.run-btn:hover { background: var(--navy-dk); }
+.run-btn:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
+
+.locked-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #f5f5f5;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Opt results */
+.opt-divider { height: 1px; background: var(--border); }
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.stat-box {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.stat-label {
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+  font-family: 'DM Mono', monospace;
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.stat-value.green { color: #27ae60; }
+.stat-value.warm  { color: var(--warm); }
+
+.ord-list { display: flex; flex-direction: column; gap: 6px; }
+
+.ord-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 12px;
+  animation: slideUp 0.25s ease both;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.ord-id { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--navy); }
+.ord-sub { font-size: 10px; color: var(--muted); margin-top: 1px; }
+.ord-saving { font-weight: 600; color: #27ae60; font-size: 12px; }
+
+.hidden { display: none !important; }
+
+.fade-in { animation: fadeUp 0.35s ease both; }
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.spinner {
+  display: inline-block;
+  width: 12px; height: 12px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: middle;
+  margin-right: 5px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* progress bar for budget usage */
+.usage-bar-wrap { margin-top: 4px; }
+.usage-bar { height: 4px; background: var(--border); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+.usage-fill { height: 100%; background: var(--navy); border-radius: 2px; transition: width 0.6s ease; }
+</style>
+</head>
+<body>
+
+<!-- ── Sidebar ── -->
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-mark">ED</div>
+    <div class="brand-name">EDIS</div>
+    <div class="brand-sub">物流延遲預測<br>最佳化調度系統</div>
+  </div>
+
+  <nav class="sidebar-nav">
+    <div class="nav-section">主選單</div>
+    <a class="nav-item active" href="#">
+      <i class="nav-icon">▪</i> Dashboard
+    </a>
+    <a class="nav-item" href="#">
+      <i class="nav-icon">◈</i> 風險訂單列表
+    </a>
+    <a class="nav-item" href="#">
+      <i class="nav-icon">◉</i> 最佳化調度
+    </a>
+    <div class="nav-section">分析</div>
+    <a class="nav-item" href="#">
+      <i class="nav-icon">◇</i> 模型效能
+    </a>
+    <a class="nav-item" href="#">
+      <i class="nav-icon">◆</i> 區域風險地圖
+    </a>
+    <div class="nav-section">系統</div>
+    <a class="nav-item" href="#">
+      <i class="nav-icon">○</i> RBAC 權限
+    </a>
+  </nav>
+
+  <div class="sidebar-footer">
+    DataCo EDIS v1.0<br>
+    2026 · 五人組專案
+  </div>
+</aside>
+
+<!-- ── Main ── -->
+<div class="main">
+
+  <!-- Topbar -->
+  <div class="topbar">
+    <div>
+      <div class="topbar-title">Dashboard</div>
+    </div>
+    <div class="topbar-right">
+      <div class="status-pill">
+        <span class="dot dot-green"></span>
+        <span id="statusText">Mock Data</span>
+      </div>
+
+      <span class="role-badge badge-viewer" id="roleBadge">● Viewer</span>
+
+      <div class="role-switch">
+        <button class="role-btn active" onclick="setRole('viewer')">Viewer</button>
+        <button class="role-btn" onclick="setRole('manager')">Manager</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div class="content">
+
+    <div class="page-header fade-in">
+      <div class="page-title">物流延遲預測與最佳化調度</div>
+      <div class="page-sub">DataCo Supply Chain Dataset · XGBoost + PuLP 最佳化引擎</div>
+    </div>
+
+    <!-- KPI -->
+    <div class="kpi-row fade-in">
+      <div class="kpi-card">
+        <div class="kpi-icon-wrap icon-warm">📦</div>
+        <div class="kpi-info">
+          <div class="kpi-label">整體延遲率</div>
+          <div class="kpi-value warm" id="kpiLateRate">—</div>
+          <div class="kpi-change" id="kpiLateDesc">載入中...</div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon-wrap icon-navy">🧠</div>
+        <div class="kpi-info">
+          <div class="kpi-label">模型 ROC-AUC</div>
+          <div class="kpi-value navy" id="kpiAuc">—</div>
+          <div class="kpi-change" id="kpiAucDesc">載入中...</div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon-wrap icon-steel">⚠️</div>
+        <div class="kpi-info">
+          <div class="kpi-label">高風險訂單數</div>
+          <div class="kpi-value steel" id="kpiHighRisk">—</div>
+          <div class="kpi-change" id="kpiHighDesc">載入中...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Two-col -->
+    <div class="grid-2 fade-in">
+
+      <!-- Risk table -->
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">延遲風險訂單列表</div>
+            <div class="panel-subtitle">p_late > 0.3 的訂單</div>
+          </div>
+          <span class="tag tag-count" id="orderCount">載入中</span>
+        </div>
+        <div class="table-scroll">
+          <table class="risk-table">
+            <thead>
+              <tr>
+                <th>訂單 ID</th>
+                <th>運送模式</th>
+                <th>地區</th>
+                <th>延遲機率</th>
+                <th>風險等級</th>
+              </tr>
+            </thead>
+            <tbody id="riskTableBody">
+              <tr><td colspan="5" style="text-align:center;padding:32px;color:var(--muted);font-size:13px">
+                載入中...
+              </td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Optimize panel -->
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">最佳化調度</div>
+            <div class="panel-subtitle">預算限制下選出最值得升級的訂單</div>
+          </div>
+          <span class="role-badge badge-viewer" id="optRoleBadge">Viewer</span>
+        </div>
+        <div class="opt-body">
+
+          <div>
+            <label class="field-label">物流預算上限 Budget (USD)</label>
+            <input type="number" class="budget-input" id="budgetInput"
+                   placeholder="5000" value="5000" min="0">
+          </div>
+
+          <button class="run-btn hidden" id="runBtn" onclick="runOptimize()">
+            執行最佳化調度
+          </button>
+
+          <div class="locked-box" id="lockedBox">
+            🔒 需要 Manager 權限才能執行最佳化
+          </div>
+
+          <!-- Results -->
+          <div id="optResult" class="hidden" style="display:flex;flex-direction:column;gap:14px">
+            <div class="opt-divider"></div>
+            <div class="stat-grid">
+              <div class="stat-box">
+                <div class="stat-label">已選訂單</div>
+                <div class="stat-value" id="optSelected">—</div>
+              </div>
+              <div class="stat-box">
+                <div class="stat-label">預期節省</div>
+                <div class="stat-value green" id="optSaving">—</div>
+              </div>
+              <div class="stat-box">
+                <div class="stat-label">升級成本</div>
+                <div class="stat-value warm" id="optCost">—</div>
+              </div>
+              <div class="stat-box">
+                <div class="stat-label">預算使用率</div>
+                <div class="stat-value" id="optUsage">—</div>
+                <div class="usage-bar-wrap">
+                  <div class="usage-bar"><div class="usage-fill" id="usageFill" style="width:0%"></div></div>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div style="font-size:11px;color:var(--muted);font-weight:500;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;font-family:'DM Mono',monospace">建議升級訂單</div>
+              <div class="ord-list" id="ordList"></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+// ══ MOCK DATA ══
+const MOCK_METRICS = {
+  roc_auc: 0.91, f1: 0.84, recall: 0.86, precision: 0.82,
+  late_rate: 0.54, high_risk_orders: 128
+};
+
+const MOCK_PREDICTIONS = [
+  { order_id_hash: "a8f3b2c1", shipping_mode: "Standard Class", order_region: "Western Europe",  p_late: 0.92, risk_bucket: "High" },
+  { order_id_hash: "d4e7f9a2", shipping_mode: "Second Class",   order_region: "Southeast Asia",  p_late: 0.87, risk_bucket: "High" },
+  { order_id_hash: "c1b5a3e8", shipping_mode: "Standard Class", order_region: "Central America", p_late: 0.83, risk_bucket: "High" },
+  { order_id_hash: "f2d8c4b1", shipping_mode: "Standard Class", order_region: "South America",   p_late: 0.78, risk_bucket: "High" },
+  { order_id_hash: "e9a1f3d7", shipping_mode: "Second Class",   order_region: "Eastern Asia",    p_late: 0.71, risk_bucket: "High" },
+  { order_id_hash: "b3c6e2a9", shipping_mode: "First Class",    order_region: "Western Europe",  p_late: 0.58, risk_bucket: "Medium" },
+  { order_id_hash: "a7d4b8f1", shipping_mode: "Standard Class", order_region: "North America",   p_late: 0.52, risk_bucket: "Medium" },
+  { order_id_hash: "c9e2a5d3", shipping_mode: "Second Class",   order_region: "Western Africa",  p_late: 0.47, risk_bucket: "Medium" },
+  { order_id_hash: "f1b7c3e6", shipping_mode: "First Class",    order_region: "Central Asia",    p_late: 0.31, risk_bucket: "Low" },
+  { order_id_hash: "d5a9f2b4", shipping_mode: "Same Day",       order_region: "Western Europe",  p_late: 0.18, risk_bucket: "Low" },
+];
+
+const mockOptimize = (budget) => {
+  const pool = [
+    { order_id_hash: "a8f3b2c1", p_late: 0.92, upgrade_cost: 380, expected_saving: 1150 },
+    { order_id_hash: "d4e7f9a2", p_late: 0.87, upgrade_cost: 290, expected_saving: 870 },
+    { order_id_hash: "c1b5a3e8", p_late: 0.83, upgrade_cost: 340, expected_saving: 820 },
+    { order_id_hash: "f2d8c4b1", p_late: 0.78, upgrade_cost: 260, expected_saving: 710 },
+    { order_id_hash: "e9a1f3d7", p_late: 0.71, upgrade_cost: 310, expected_saving: 640 },
+  ];
+  let rem = budget, sel = [];
+  for (const o of pool) { if (rem >= o.upgrade_cost) { sel.push(o); rem -= o.upgrade_cost; } }
+  return {
+    budget,
+    selected_orders: sel,
+    total_cost: sel.reduce((s,o) => s + o.upgrade_cost, 0),
+    expected_total_saving: sel.reduce((s,o) => s + o.expected_saving, 0)
+  };
+};
+
+// ══ API BASE (換成真實 API 時修改這裡) ══
+const API_BASE = 'http://localhost:8000';
+
+async function fetchMetrics() {
+  // TODO: return fetch(`${API_BASE}/api/metrics`).then(r => r.json());
+  return new Promise(r => setTimeout(() => r(MOCK_METRICS), 500));
+}
+async function fetchPredictions() {
+  // TODO: return fetch(`${API_BASE}/api/predict`).then(r => r.json());
+  return new Promise(r => setTimeout(() => r(MOCK_PREDICTIONS), 700));
+}
+async function fetchOptimize(budget, role) {
+  if (role !== 'manager') throw new Error('403 Forbidden');
+  // TODO: return fetch(`${API_BASE}/api/optimize`, { method:'POST', headers:{'Content-Type':'application/json','X-Role':role}, body: JSON.stringify({budget}) }).then(r=>r.json());
+  return new Promise(r => setTimeout(() => r(mockOptimize(budget)), 800));
+}
+
+// ══ State ══
+let currentRole = 'viewer';
+
+// ══ Render ══
+function renderMetrics(d) {
+  document.getElementById('kpiLateRate').textContent = (d.late_rate * 100).toFixed(0) + '%';
+  document.getElementById('kpiLateDesc').textContent = `F1 ${d.f1} · Recall ${d.recall}`;
+  document.getElementById('kpiAuc').textContent = d.roc_auc.toFixed(2);
+  document.getElementById('kpiAucDesc').textContent = `Precision ${d.precision} · F1 ${d.f1}`;
+  document.getElementById('kpiHighRisk').textContent = d.high_risk_orders;
+  document.getElementById('kpiHighDesc').textContent = `p_late ≥ 0.7 的訂單`;
+}
+
+function fillClass(bucket) {
+  return bucket === 'High' ? 'fill-high' : bucket === 'Medium' ? 'fill-med' : 'fill-low';
+}
+function pillClass(bucket) {
+  return bucket === 'High' ? 'r-high' : bucket === 'Medium' ? 'r-med' : 'r-low';
+}
+
+function renderPredictions(data) {
+  document.getElementById('orderCount').textContent = `共 ${data.length} 筆`;
+  document.getElementById('riskTableBody').innerHTML = data.map(o => `
+    <tr>
+      <td><span class="order-id">${o.order_id_hash}</span></td>
+      <td>${o.shipping_mode}</td>
+      <td style="color:var(--muted)">${o.order_region}</td>
+      <td>
+        <div class="prob-wrap">
+          <div class="prob-bar"><div class="prob-fill ${fillClass(o.risk_bucket)}" style="width:${o.p_late*100}%"></div></div>
+          <span class="prob-val">${(o.p_late*100).toFixed(0)}%</span>
+        </div>
+      </td>
+      <td><span class="risk-pill ${pillClass(o.risk_bucket)}">${o.risk_bucket}</span></td>
+    </tr>
+  `).join('');
+}
+
+function renderOptResult(d) {
+  const el = document.getElementById('optResult');
+  el.classList.remove('hidden');
+  el.style.display = 'flex';
+  document.getElementById('optSelected').textContent = d.selected_orders.length;
+  document.getElementById('optSaving').textContent = '$' + d.expected_total_saving.toLocaleString();
+  document.getElementById('optCost').textContent = '$' + d.total_cost.toLocaleString();
+  const pct = ((d.total_cost / d.budget) * 100).toFixed(0);
+  document.getElementById('optUsage').textContent = pct + '%';
+  document.getElementById('usageFill').style.width = pct + '%';
+
+  document.getElementById('ordList').innerHTML = d.selected_orders.map((o, i) => `
+    <div class="ord-item" style="animation-delay:${i*0.07}s">
+      <div>
+        <div class="ord-id">${o.order_id_hash}</div>
+        <div class="ord-sub">升級成本 $${o.upgrade_cost} · 延遲率 ${(o.p_late*100).toFixed(0)}%</div>
+      </div>
+      <div class="ord-saving">+$${o.expected_saving}</div>
+    </div>
+  `).join('');
+}
+
+// ══ Role ══
+function setRole(role) {
+  currentRole = role;
+  document.querySelectorAll('.role-btn').forEach(b =>
+    b.classList.toggle('active', b.textContent.toLowerCase() === role));
+
+  const isM = role === 'manager';
+  document.getElementById('roleBadge').className = isM ? 'role-badge badge-manager' : 'role-badge badge-viewer';
+  document.getElementById('roleBadge').textContent = isM ? '● Manager' : '● Viewer';
+  document.getElementById('optRoleBadge').className = isM ? 'role-badge badge-manager' : 'role-badge badge-viewer';
+  document.getElementById('optRoleBadge').textContent = isM ? 'Manager' : 'Viewer';
+
+  document.getElementById('runBtn').classList.toggle('hidden', !isM);
+  document.getElementById('lockedBox').classList.toggle('hidden', isM);
+  document.getElementById('optResult').classList.add('hidden');
+}
+
+// ══ Optimize ══
+async function runOptimize() {
+  const btn = document.getElementById('runBtn');
+  const budget = parseFloat(document.getElementById('budgetInput').value) || 5000;
+  btn.innerHTML = '<span class="spinner"></span>計算中...';
+  btn.disabled = true;
+  try {
+    const data = await fetchOptimize(budget, currentRole);
+    renderOptResult(data);
+  } catch(e) { alert(e.message); }
+  finally {
+    btn.innerHTML = '執行最佳化調度';
+    btn.disabled = false;
+  }
+}
+
+// ══ Init ══
+async function init() {
+  const [m, p] = await Promise.all([fetchMetrics(), fetchPredictions()]);
+  renderMetrics(m);
+  renderPredictions(p);
+}
+init();
+</script>
+</body>
+</html>
