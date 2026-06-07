@@ -775,14 +775,12 @@ const API_BASE = 'http://localhost:8000';
 
 async function fetchMetrics() {
   return fetch(`${API_BASE}/api/metrics`).then(r => r.json());
-  return new Promise(r => setTimeout(() => r(MOCK_METRICS), 500));
 }
 async function fetchPredictions() {
   const payload = await fetch(`${API_BASE}/api/predict`, {
     headers: { 'X-Role': currentRole === 'manager' ? 'Logistics_Manager' : 'Viewer' }
   }).then(r => r.json());
   return Array.isArray(payload) ? payload : (payload.data || []);
-  return new Promise(r => setTimeout(() => r(MOCK_PREDICTIONS), 700));
 }
 async function fetchOptimize(budget, role) {
   if (role !== 'manager') throw new Error('403 Forbidden');
@@ -803,7 +801,6 @@ async function fetchOptimize(budget, role) {
     throw new Error(errorPayload.detail?.message || errorPayload.detail || `HTTP ${response.status}`);
   }
   return response.json();
-  return new Promise(r => setTimeout(() => r(mockOptimize(budget)), 800));
 }
 
 // ══ State ══
