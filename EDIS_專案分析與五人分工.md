@@ -1,8 +1,8 @@
-# EDIS 專案分析與五人分工
+# EDIS 專案分析與六人協作分工
 
 更新日期：2026-06-06  
 專案名稱：DataCo 物流延遲預測與最佳化調度系統（EDIS）  
-組員：Danny、紹光、Lisa、子堯、Bright
+組員：Danny、紹光、Lisa、子堯、Bright、祖航
 
 ---
 
@@ -116,7 +116,7 @@ MVP 建議不要放入以下欄位作為模型輸入：
 
 ### 1.8 建議 MVP 範圍
 
-為了讓五人分工可落地，建議 MVP 不要一次做太多功能。最小可展示版本應包含：
+為了讓六人協作可落地，建議 MVP 不要一次做太多功能。最小可展示版本應包含：
 
 1. DataCo 資料載入與 EDA。
 2. 敏感欄位移除與安全資料集輸出。
@@ -133,6 +133,11 @@ MVP 建議不要放入以下欄位作為模型輸入：
    - 預算輸入
    - 最佳化結果
    - Role Switcher
+   - chat 輔助區，讓使用者能詢問模型預估原因與可採取決策。
+   - 風險訂單篩選，例如列出 `p_late > 0.5` 的訂單。
+   - 管理員可輸入 commit 數量或預算，系統依條件產生調度建議。
+   - 提供可勾選或下拉選單，讓使用者選擇可能造成延遲的原因或特徵。
+   - 可選取單筆訂單，請 LLM 產生可讀的風險解釋或主管決策建議。
 8. Viewer 與 Manager 權限差異展示。
 9. 期末簡報與 demo script。
 
@@ -156,177 +161,199 @@ MVP 建議不要放入以下欄位作為模型輸入：
 
 ---
 
-## 3. 五人角色分工總覽
+## 3. 六人協作分工總覽
 
 ### 分工原則
 
-1. 每個人都要有清楚可交付成果。
-2. 技術模組之間要有明確輸入輸出，避免互相等待。
-3. 分工要對應期末展示：資料、模型、最佳化、系統、安全、簡報。
-4. 每個工作包都要能被驗收。
+本次分工不採固定角色制，而採「任務池認領制」。六位組員都可以參與資料、模型、後端、Dashboard、測試與報告，不預先限制誰只能做哪一塊。每個任務至少要有人認領實作，重要功能需有第二位組員協助 review 或測試。
 
-### 建議角色分配
+1. 任務以功能模組為單位，不以人名綁死。
+2. 每個人可以跨模組參與，依照當週時間與能力認領任務。
+3. 每個任務需留下可驗收交付物，例如程式、截圖、測試結果、圖表或簡報頁。
+4. 報告時每個人只負責說明自己實際完成或共同完成的部分。
+5. 若多人共同完成同一功能，報告時可拆成「設計想法、實作方式、測試結果、遇到問題與修正」各自說明。
+6. 全組共同維護 demo flow，避免最後只有單一成員知道系統如何啟動與展示。
 
-| 成員 | 主責角色 | 核心任務 | 主要交付物 |
-|---|---|---|---|
-| Danny | 專案整合與最佳化決策 | 系統架構、進度整合、最佳化模型、demo flow | 架構圖、optimizer、整合腳本、最終 demo 流程 |
-| Lisa | 資料管線與隱私安全 | DataCo 清理、去識別化、特徵工程前處理 | `security_utils.py`、`data_pipeline.py`、安全版資料集 |
-| 子堯 | ML 模型與評估 | XGBoost 訓練、評估、特徵重要性、模型輸出 | `model_pipeline.py`、模型檔、評估報告 |
-| Bright | 後端 API 與 RBAC 測試 | FastAPI、權限檢查、403 測試、端點整合 | `app.py`、API 測試結果、權限驗證紀錄 |
-| 紹光 | Dashboard、UI/UX 與簡報 | 前端儀表板、視覺化、角色切換、簡報與報告 | `index.html`、`styles.css`、demo 截圖、期末簡報 |
+### 協作流程
 
----
-
-## 4. 個人詳細工作包
-
-### 4.1 Danny：專案整合與最佳化決策
-
-**定位**  
-Danny 負責把整個專案從「模型預測」推進到「可執行決策」，並確保各模組能在期末 demo 串起來。
-
-**任務清單**
-
-| 任務 ID | 任務 | 輸入 | 輸出 |
-|---|---|---|---|
-| D-01 | 定義 MVP 範圍與系統流程 | 現有簡報、實作計畫 | MVP scope、系統流程圖 |
-| D-02 | 設計最佳化問題 | 模型預測機率、訂單價值、預算 | 目標函數與限制式 |
-| D-03 | 實作 `optimizer.py` | 預測結果 CSV | 最佳化推薦訂單清單 |
-| D-04 | 整合模型輸出與最佳化輸入 | 子堯模型結果 | `prediction_with_decision.csv` |
-| D-05 | 設計 demo script | API、Dashboard、簡報 | 3 至 5 分鐘展示流程 |
-
-**驗收標準**
-
-- 能用固定測試資料跑出「建議升級運送的訂單」。
-- 每筆建議要有原因，例如高延遲風險、高預期損失、在預算內。
-- 能清楚說明最佳化不是單純排序，而是在限制條件下選擇最佳組合。
+| 流程 | 做法 | 目的 |
+|---|---|---|
+| 任務認領 | 從主任務清單選擇本週要做的項目，記錄認領人與協作者 | 避免重複做工，也保留彈性 |
+| 共同 review | 重要功能完成後，由非實作者測試一次 | 降低 demo 當天失誤 |
+| 交付記錄 | 每項任務附上檔案路徑、截圖或測試指令 | 方便整合報告與簡報 |
+| 報告分配 | 依照實際貢獻分配報告內容 | 不固定誰講哪個模組，讓每個人講自己做過的部分 |
 
 ---
 
-### 4.2 Lisa：資料管線與隱私安全
+## 4. 老師建議與功能修正方向
+
+依照老師建議，Dashboard 不應只顯示模型分數與訂單表，還要能呈現「模型預估的好壞、真正的決策、可調整的管理參數、原因分析與互動解釋」。因此後續功能修正如下：
+
+| 老師建議 | 專案修正方向 | 對應交付物 |
+|---|---|---|
+| Dashboard 要把測試資料、模型預估好壞、跟決策列出來 | 新增測試集摘要、模型 KPI、預測結果與最佳化決策區塊 | Dashboard KPI、風險訂單表、最佳化推薦表 |
+| 加圖表，例如月份比較或 hat 圖 | 增加月份延遲率、運送模式延遲率、地區延遲率圖表 | EDA 圖表、Dashboard 視覺化 |
+| 分析原因，例如每次 delay 都是因為什麼原因 | 加入延遲原因分析，使用特徵重要性、Shipping Mode、Region、月份等欄位解釋 | 原因分析區、feature importance |
+| 管理表可以加入 commit 數量 | 在管理者操作區加入 commit 數量或預算輸入，作為最佳化限制 | Dashboard input、`/api/optimize` 參數 |
+| 思考實際應用面，例如不懂的人應該如何調整 | Dashboard 顯示白話建議，例如「提高預算會增加可升級訂單數」 | 管理建議文字、決策說明 |
+| 互動介面用下拉式選單列出可能造成延遲的特徵，設定完再 submit | 加入可選特徵或情境條件，例如運送模式、地區、月份、風險門檻 | 篩選器、情境選單、submit 按鈕 |
+| 跳出 delay 的可能性後，可串 LLM 解釋成人話給老闆聽 | 單筆訂單可產生「主管版解釋」，說明為什麼高風險、建議怎麼處理 | LLM 解釋按鈕、文字摘要 |
+| 風險訂單設定門檻值大於 0.5 才列出 | Dashboard 預設顯示 `p_late > 0.5`，並提供門檻調整 | 風險門檻 slider/input、篩選後訂單表 |
+
+---
+
+## 5. 六人共用工作包
+
+### 5.1 資料與 EDA 工作包
 
 **定位**  
-Lisa 負責讓資料從原始 DataCo CSV 變成安全、乾淨、可建模的資料。這個角色是模型與安全架構的基礎。
+讓 DataCo 原始資料變成安全、乾淨、可建模、可解釋的資料，並產生 Dashboard 可用的圖表與洞察。
 
-**任務清單**
-
-| 任務 ID | 任務 | 輸入 | 輸出 |
-|---|---|---|---|
-| L-01 | 建立欄位盤點表 | DataCo CSV、欄位說明 | 欄位分類表 |
-| L-02 | 標記敏感欄位與不可用欄位 | 原始欄位 | `sensitive_columns`、`leakage_columns` |
-| L-03 | 實作 `security_utils.py` | 原始資料列 | 去識別化資料列 |
-| L-04 | 實作 `data_pipeline.py` | DataCo CSV | 安全版資料集 |
-| L-05 | 產出 EDA 摘要 | 清理後資料 | 缺失值、類別分布、延遲比例 |
+| 任務 ID | 任務 | 認領人 | 協作者 | 交付物 | 報告人 |
+|---|---|---|---|---|---|
+| DATA-01 | 欄位盤點與資料字典整理 | 待填 | 待填 | 欄位分類表 | 實際完成者 |
+| DATA-02 | 敏感欄位與資料洩漏欄位清單 | 待填 | 待填 | `sensitive_columns`、`leakage_columns` | 實際完成者 |
+| DATA-03 | 去識別化與資料前處理 | 待填 | 待填 | `train_ready.csv`、`test_ready.csv` | 實際完成者 |
+| DATA-04 | 月份、地區、運送模式延遲率分析 | 待填 | 待填 | EDA 圖表與摘要 | 實際完成者 |
+| DATA-05 | 延遲原因初步分析 | 待填 | 待填 | 原因分析段落 | 實際完成者 |
 
 **驗收標準**
 
 - 原始姓名、地址、郵遞區號不得進入訓練資料。
 - `Late_delivery_risk` 只能作為標籤，不能留在特徵矩陣。
-- 產出一份乾淨的 `train_ready.csv`，子堯可直接使用。
-- EDA 至少包含延遲比例、Shipping Mode 分布、地區延遲風險、訂單價值分布。
+- 至少產出月份、運送模式、地區三類延遲分析。
+- 能用白話說明「哪些條件比較容易延遲」。
 
----
-
-### 4.3 子堯：ML 模型與評估
+### 5.2 模型與解釋工作包
 
 **定位**  
-子堯負責讓延遲預測模型可信、可解釋、可被最佳化模組使用。
+建立延遲風險預測模型，並把模型結果轉成可被 Dashboard 與報告使用的 KPI、風險等級與解釋素材。
 
-**任務清單**
-
-| 任務 ID | 任務 | 輸入 | 輸出 |
-|---|---|---|---|
-| Z-01 | 建立 baseline model | `train_ready.csv` | Logistic Regression 或 Dummy baseline |
-| Z-02 | 訓練 XGBoost | 安全特徵矩陣 | XGBoost model |
-| Z-03 | 評估模型 | validation set | ROC-AUC、PR-AUC、F1、混淆矩陣 |
-| Z-04 | 調整 threshold | 預測機率、商業成本 | 建議決策閾值 |
-| Z-05 | 輸出預測結果 | 測試訂單 | `predictions.csv` |
-| Z-06 | 可解釋性分析 | 訓練後模型 | feature importance 或 SHAP 圖 |
+| 任務 ID | 任務 | 認領人 | 協作者 | 交付物 | 報告人 |
+|---|---|---|---|---|---|
+| MODEL-01 | 建立 baseline model | 待填 | 待填 | baseline 結果 | 實際完成者 |
+| MODEL-02 | 訓練 XGBoost | 待填 | 待填 | 模型檔 | 實際完成者 |
+| MODEL-03 | 評估模型好壞 | 待填 | 待填 | ROC-AUC、Precision、Recall、F1 | 實際完成者 |
+| MODEL-04 | 輸出預測結果 | 待填 | 待填 | `predictions.csv` | 實際完成者 |
+| MODEL-05 | 分析 feature importance | 待填 | 待填 | 重要特徵圖表 | 實際完成者 |
+| MODEL-06 | 設計風險門檻 | 待填 | 待填 | `p_late > 0.5` 預設篩選規則 | 實際完成者 |
 
 **驗收標準**
 
-- 有 baseline 與 XGBoost 比較。
 - 評估不只放 accuracy，至少要有 ROC-AUC、Recall、Precision、F1。
-- 明確說明資料洩漏欄位已排除。
-- 產出的 `predictions.csv` 至少包含 `order_id_hash`、`p_late`、`risk_bucket`、`expected_penalty`。
+- `predictions.csv` 至少包含 `order_id_hash`、`p_late`、`risk_bucket`、`expected_penalty`。
+- 報告能說明模型在哪些情況預測較可信，哪些地方仍有限制。
+- Dashboard 能列出風險門檻大於 0.5 的訂單。
 
----
-
-### 4.4 Bright：後端 API 與 RBAC 測試
+### 5.3 最佳化與管理決策工作包
 
 **定位**  
-Bright 負責把模型與最佳化功能包成後端服務，並確保 Viewer 與 Manager 權限差異真的在後端成立。
+把模型預測轉成管理者可以操作的決策，例如在預算或 commit 數量限制下，推薦最值得處理的訂單。
 
-**任務清單**
+| 任務 ID | 任務 | 認領人 | 協作者 | 交付物 | 報告人 |
+|---|---|---|---|---|---|
+| OPT-01 | 定義最佳化目標函數 | 待填 | 待填 | 目標函數與限制式 | 實際完成者 |
+| OPT-02 | 實作 `optimizer.py` | 待填 | 待填 | 最佳化推薦清單 | 實際完成者 |
+| OPT-03 | 加入預算限制 | 待填 | 待填 | 預算內推薦結果 | 實際完成者 |
+| OPT-04 | 加入 commit 數量限制 | 待填 | 待填 | 固定數量推薦結果 | 實際完成者 |
+| OPT-05 | 產生每筆建議原因 | 待填 | 待填 | 高風險、高預期損失、符合限制等原因 | 實際完成者 |
 
-| 任務 ID | 任務 | 輸入 | 輸出 |
-|---|---|---|---|
-| B-01 | 建立 FastAPI 專案骨架 | 實作計畫 | `app.py` |
-| B-02 | 實作 `/api/metrics` | 模型評估結果 | 公開 KPI JSON |
-| B-03 | 實作 `/api/predict` | 安全測試資料 | 延遲風險 JSON |
-| B-04 | 實作 `/api/optimize` | 預測結果、預算 | 最佳化結果 JSON |
-| B-05 | 實作角色驗證 | API key 或 role header | Viewer、Manager 權限控制 |
-| B-06 | 撰寫安全測試 | Viewer 呼叫 optimize | 403 測試紀錄 |
+**驗收標準**
+
+- 能用固定測試資料跑出「建議升級運送的訂單」。
+- 每筆建議要有原因，例如高延遲風險、高預期損失、在預算或 commit 數量內。
+- 能清楚說明最佳化不是單純排序，而是在限制條件下選擇最佳組合。
+
+### 5.4 後端 API 與權限工作包
+
+**定位**  
+把資料、模型與最佳化功能包成後端服務，並確保 Viewer 與 Logistics_Manager 權限差異真的在後端成立。
+
+| 任務 ID | 任務 | 認領人 | 協作者 | 交付物 | 報告人 |
+|---|---|---|---|---|---|
+| API-01 | 維護 FastAPI 骨架 | 待填 | 待填 | `app.py` | 實際完成者 |
+| API-02 | 實作 `/api/metrics` | 待填 | 待填 | KPI JSON | 實際完成者 |
+| API-03 | 實作 `/api/predict` | 待填 | 待填 | 延遲風險 JSON | 實際完成者 |
+| API-04 | 實作 `/api/optimize` | 待填 | 待填 | 最佳化結果 JSON | 實際完成者 |
+| API-05 | 實作 RBAC role header | 待填 | 待填 | 權限控制 | 實際完成者 |
+| API-06 | 測試 Viewer 403 | 待填 | 待填 | 403 測試紀錄 | 實際完成者 |
+| API-07 | 預留 LLM 解釋端點或資料格式 | 待填 | 待填 | 可供解釋的 JSON payload | 實際完成者 |
 
 **驗收標準**
 
 - Viewer 呼叫 `/api/optimize` 必須回傳 403。
-- Manager 呼叫 `/api/optimize` 能回傳最佳化調度結果。
+- Logistics_Manager 呼叫 `/api/optimize` 能回傳最佳化調度結果。
 - `/api/predict` 回傳資料必須是去識別化結果。
-- 需保留一份 API demo 指令，例如 curl 或 Postman 截圖。
+- 缺少真實資料時不可回傳假資料，應明確提示需先產生資料。
 
----
-
-### 4.5 紹光：Dashboard、UI/UX 與簡報
+### 5.5 Dashboard 與互動工作包
 
 **定位**  
-紹光負責讓專案成果可被看懂、可被展示、可被評分者快速理解。
+讓系統成果可以被非技術使用者看懂，並讓管理者能透過 Dashboard 進行條件設定與決策。
 
-**任務清單**
-
-| 任務 ID | 任務 | 輸入 | 輸出 |
-|---|---|---|---|
-| S-01 | 設計 Dashboard layout | 系統流程、API 回傳格式 | Wireframe |
-| S-02 | 實作 KPI 卡片 | `/api/metrics` | 模型效能區塊 |
-| S-03 | 實作風險訂單表 | `/api/predict` | 延遲風險列表 |
-| S-04 | 實作預算與最佳化區塊 | `/api/optimize` | 調度推薦結果 |
-| S-05 | 實作 Role Switcher | Viewer、Manager role | 權限視覺差異 |
-| S-06 | 製作期末簡報與 demo 截圖 | 全組成果 | 最終簡報檔 |
+| 任務 ID | 任務 | 認領人 | 協作者 | 交付物 | 報告人 |
+|---|---|---|---|---|---|
+| UI-01 | Dashboard layout | 待填 | 待填 | Dashboard 畫面 | 實際完成者 |
+| UI-02 | KPI 與模型好壞區塊 | 待填 | 待填 | ROC-AUC、F1、延遲率、高風險數 | 實際完成者 |
+| UI-03 | 風險訂單表 | 待填 | 待填 | `p_late > 0.5` 訂單列表 | 實際完成者 |
+| UI-04 | 月份、地區、運送模式圖表 | 待填 | 待填 | 延遲原因視覺化 | 實際完成者 |
+| UI-05 | 管理者輸入區 | 待填 | 待填 | 可調整決策條件 | 實際完成者 |
+| UI-06 | 下拉式特徵選單與 submit | 待填 | 待填 | 情境篩選結果 | 實際完成者 |
+| UI-07 | LLM 解釋互動 | 待填 | 待填 | 主管版白話說明 | 實際完成者 |
+| UI-08 | Role Switcher | 待填 | 待填 | 權限視覺差異 | 實際完成者 |
 
 **驗收標準**
 
 - Viewer 視角看不到最佳化按鈕或按鈕不可點擊。
-- Manager 視角可以輸入預算並看到最佳化結果。
-- Dashboard 至少有三個 KPI：延遲率、模型 AUC 或 F1、高風險訂單數。
-- 簡報中要有一頁清楚展示「預測到決策」的完整流程。
+- Logistics_Manager 視角可以輸入預算或 commit 數量並看到最佳化結果。
+- Dashboard 至少有三個 KPI 與兩種以上圖表。
+- 高風險訂單預設以 `p_late > 0.5` 篩選。
+- 單筆訂單可看到「為什麼可能延遲」與「主管可以怎麼決策」。
 
----
+### 5.6 報告、簡報與 Demo 工作包
 
-## 5. RACI 矩陣
+**定位**  
+把實作成果轉成老師與同學能理解的敘事：問題、資料、模型、決策、系統、互動、限制與未來改善。
 
-說明：  
-R = Responsible，實際執行  
-A = Accountable，最後負責  
-C = Consulted，需提供意見  
-I = Informed，需同步進度
-
-| 工作項目 | Danny | Lisa | 子堯 | Bright | 紹光 |
+| 任務 ID | 任務 | 認領人 | 協作者 | 交付物 | 報告人 |
 |---|---|---|---|---|---|
-| 專案範圍與架構定義 | A/R | C | C | C | C |
-| Kaggle 資料理解與 EDA | C | A/R | C | I | I |
-| 敏感欄位移除與去識別化 | C | A/R | C | C | I |
-| 特徵工程 | C | A/R | R | I | I |
-| XGBoost 模型訓練 | I | C | A/R | I | I |
-| 模型評估與可解釋性 | C | C | A/R | I | C |
-| 最佳化調度模型 | A/R | I | C | C | C |
-| FastAPI 後端 | C | I | C | A/R | C |
-| RBAC 與 403 驗證 | C | C | I | A/R | R |
-| Dashboard UI | C | I | I | C | A/R |
-| Demo script | A/R | I | C | C | R |
-| 期末簡報 | A | C | C | C | R |
+| REP-01 | 整理專案動機與商業情境 | 待填 | 待填 | 報告前言 | 實際完成者 |
+| REP-02 | 整理資料處理與 EDA | 待填 | 待填 | 資料分析段落 | 實際完成者 |
+| REP-03 | 整理模型方法與結果 | 待填 | 待填 | 模型段落 | 實際完成者 |
+| REP-04 | 整理最佳化決策 | 待填 | 待填 | 決策段落 | 實際完成者 |
+| REP-05 | 整理 API、RBAC、Dashboard | 待填 | 待填 | 系統展示段落 | 實際完成者 |
+| REP-06 | 整理老師建議回應 | 待填 | 待填 | 建議回應頁 | 實際完成者 |
+| REP-07 | Demo script 與截圖 | 待填 | 待填 | 展示腳本 | 實際完成者 |
+
+**驗收標準**
+
+- 每個人報告自己實際完成的部分。
+- 若同一功能多人完成，需在報告中說明各自貢獻。
+- 簡報至少要有一頁回應老師八點建議。
+- Demo 流程要能從 Dashboard 看到資料、預測、決策與權限差異。
 
 ---
 
-## 6. 建議里程碑
+## 6. 協作矩陣
+
+本表不指定固定負責人，只列出工作類型與建議參與方式。實際執行時，在「認領人、協作者、報告人」欄填入人名。
+
+| 工作項目 | 建議參與人數 | 認領人 | 協作者 | Review / 測試 | 報告人 |
+|---|---:|---|---|---|---|
+| 專案範圍與 demo flow | 2 至 3 人 | 待填 | 待填 | 全員看過一次 | 實際完成者 |
+| 資料理解與 EDA | 2 至 3 人 | 待填 | 待填 | 至少 1 人檢查圖表 | 實際完成者 |
+| 敏感欄位與資料洩漏控制 | 2 人 | 待填 | 待填 | 至少 1 人檢查欄位清單 | 實際完成者 |
+| 模型訓練與評估 | 2 人 | 待填 | 待填 | 至少 1 人重跑指令 | 實際完成者 |
+| 模型解釋與原因分析 | 2 至 3 人 | 待填 | 待填 | 至少 1 人確認敘事合理 | 實際完成者 |
+| 最佳化與管理決策 | 2 人 | 待填 | 待填 | 至少 1 人測試不同預算或 commit 數量 | 實際完成者 |
+| FastAPI 與 RBAC | 2 人 | 待填 | 待填 | 至少 1 人測試 403 | 實際完成者 |
+| Dashboard 與互動功能 | 2 至 3 人 | 待填 | 待填 | 至少 1 人測試 Viewer / Manager | 實際完成者 |
+| LLM 白話解釋 | 1 至 2 人 | 待填 | 待填 | 至少 1 人確認輸出不洩漏敏感資訊 | 實際完成者 |
+| 期末簡報與 Demo | 全員 | 待填 | 待填 | 全員彩排 | 分段報告 |
+
+---
+
+## 7. 建議里程碑
 
 ### Milestone 1：資料與問題定義完成
 
@@ -340,15 +367,14 @@ I = Informed，需同步進度
 - EDA 初版圖表。
 - MVP scope。
 
-負責人：
+協作方式：
 
-- Lisa 主責資料。
-- Danny 主責 scope。
-- 子堯確認建模可用欄位。
+- 由當週可投入的 2 至 3 位組員認領。
+- 其他組員協助確認欄位是否符合「出貨前可得」原則。
 
-### Milestone 2：模型與最佳化核心完成
+### Milestone 2：模型、原因分析與最佳化核心完成
 
-**目標**：讓系統有可運作的 AI 預測與決策輸出。
+**目標**：讓系統有可運作的 AI 預測、原因分析與決策輸出。
 
 交付物：
 
@@ -356,18 +382,18 @@ I = Informed，需同步進度
 - `model_pipeline.py`
 - 模型評估結果
 - `predictions.csv`
+- feature importance 或延遲原因分析
 - `optimizer.py`
 - 最佳化推薦結果
 
-負責人：
+協作方式：
 
-- 子堯主責模型。
-- Danny 主責最佳化。
-- Lisa 支援資料修正。
+- 模型與最佳化可由不同組員認領，但必須共同確認 `predictions.csv` 欄位格式。
+- 原因分析需同時參考 EDA 與模型重要特徵，避免只憑直覺說明。
 
-### Milestone 3：API 與 Dashboard 串接完成
+### Milestone 3：API、Dashboard 與互動功能完成
 
-**目標**：讓前後端可以完成展示流程。
+**目標**：讓前後端可以完成展示流程，並回應老師對 Dashboard 互動性的建議。
 
 交付物：
 
@@ -376,13 +402,16 @@ I = Informed，需同步進度
 - `/api/optimize`
 - RBAC 測試
 - Dashboard 初版
-- Viewer 與 Manager 視角展示
+- `p_late > 0.5` 風險訂單篩選
+- 月份、地區、運送模式圖表
+- 預算或 commit 數量輸入
+- 下拉式特徵選單與 submit
+- LLM 白話解釋或可替代的規則式解釋文字
 
-負責人：
+協作方式：
 
-- Bright 主責 API。
-- 紹光主責 UI。
-- Danny 協調 API 與 optimizer 串接。
+- 前端、後端、資料欄位格式要同步更新。
+- 每新增一個 UI 控制項，就要確認後端或前端有對應資料來源。
 
 ### Milestone 4：簡報、測試與最終 Demo
 
@@ -396,57 +425,66 @@ I = Informed，需同步進度
 - 系統流程圖。
 - 模型與最佳化結果說明。
 - 權限控制展示。
+- 老師八點建議回應頁。
 
-負責人：
+協作方式：
 
-- 紹光主責簡報。
-- Danny 主責 demo flow。
-- Bright 主責安全測試截圖。
-- 子堯主責模型結果說明。
-- Lisa 主責資料安全說明。
+- 每位組員整理自己實際完成的內容與截圖。
+- 全員共同彩排，確保每個人都知道前一段與下一段如何銜接。
 
 ---
 
-## 7. 建議主任務清單
+## 8. 建議主任務清單
 
-| 任務 ID | 任務名稱 | 負責人 | 優先權 | 依賴 |
-|---|---|---|---|---|
-| TASK-101 | 確認 MVP scope 與 demo 流程 | Danny | High | 無 |
-| TASK-102 | DataCo 欄位盤點與資料字典整理 | Lisa | High | 無 |
-| TASK-103 | 敏感欄位與資料洩漏欄位清單 | Lisa | High | TASK-102 |
-| TASK-104 | EDA 圖表與延遲風險初步洞察 | Lisa | High | TASK-102 |
-| TASK-105 | 去識別化模組 `security_utils.py` | Lisa | High | TASK-103 |
-| TASK-106 | 資料前處理管線 `data_pipeline.py` | Lisa | High | TASK-105 |
-| TASK-107 | Baseline model | 子堯 | Medium | TASK-106 |
-| TASK-108 | XGBoost model | 子堯 | High | TASK-107 |
-| TASK-109 | 模型評估與 feature importance | 子堯 | High | TASK-108 |
-| TASK-110 | 輸出 `predictions.csv` | 子堯 | High | TASK-108 |
-| TASK-111 | 最佳化問題公式化 | Danny | High | TASK-110 |
-| TASK-112 | 實作 `optimizer.py` | Danny | High | TASK-111 |
-| TASK-113 | FastAPI 骨架與 `/api/metrics` | Bright | High | TASK-109 |
-| TASK-114 | `/api/predict` 串接模型輸出 | Bright | High | TASK-110 |
-| TASK-115 | `/api/optimize` 串接最佳化結果 | Bright | High | TASK-112 |
-| TASK-116 | RBAC role header 與 403 測試 | Bright | High | TASK-115 |
-| TASK-117 | Dashboard wireframe | 紹光 | Medium | TASK-101 |
-| TASK-118 | Dashboard API 串接與 Role Switcher | 紹光 | High | TASK-113 到 TASK-116 |
-| TASK-119 | 最終簡報與 Demo 截圖 | 紹光 | High | TASK-118 |
-| TASK-120 | Final integration rehearsal | 全員 | High | 全部核心任務 |
+| 任務 ID | 任務名稱 | 認領人 | 協作者 | 交付物 | 報告人 | 優先權 | 依賴 |
+|---|---|---|---|---|---|---|---|
+| TASK-101 | 確認 MVP scope 與 demo 流程 | 待填 | 待填 | demo flow | 實際完成者 | High | 無 |
+| TASK-102 | DataCo 欄位盤點與資料字典整理 | 待填 | 待填 | 欄位分類表 | 實際完成者 | High | 無 |
+| TASK-103 | 敏感欄位與資料洩漏欄位清單 | 待填 | 待填 | 欄位清單 | 實際完成者 | High | TASK-102 |
+| TASK-104 | EDA 圖表與延遲風險初步洞察 | 待填 | 待填 | EDA 圖表 | 實際完成者 | High | TASK-102 |
+| TASK-105 | 去識別化模組 `security_utils.py` | 待填 | 待填 | 去識別化程式 | 實際完成者 | High | TASK-103 |
+| TASK-106 | 資料前處理管線 `data_pipeline.py` | 待填 | 待填 | 前處理管線 | 實際完成者 | High | TASK-105 |
+| TASK-107 | Baseline model | 待填 | 待填 | baseline 結果 | 實際完成者 | Medium | TASK-106 |
+| TASK-108 | XGBoost model | 待填 | 待填 | 模型結果 | 實際完成者 | High | TASK-107 |
+| TASK-109 | 模型評估與 feature importance | 待填 | 待填 | 評估與解釋圖表 | 實際完成者 | High | TASK-108 |
+| TASK-110 | 輸出 `predictions.csv` | 待填 | 待填 | 預測結果 CSV | 實際完成者 | High | TASK-108 |
+| TASK-111 | 風險門檻 `p_late > 0.5` 篩選 | 待填 | 待填 | 高風險訂單列表 | 實際完成者 | High | TASK-110 |
+| TASK-112 | 最佳化問題公式化 | 待填 | 待填 | 目標函數與限制式 | 實際完成者 | High | TASK-110 |
+| TASK-113 | 實作 `optimizer.py` | 待填 | 待填 | 最佳化程式 | 實際完成者 | High | TASK-112 |
+| TASK-114 | 加入預算與 commit 數量限制 | 待填 | 待填 | 管理者決策條件 | 實際完成者 | High | TASK-113 |
+| TASK-115 | FastAPI 骨架與 `/api/metrics` | 待填 | 待填 | API 端點 | 實際完成者 | High | TASK-109 |
+| TASK-116 | `/api/predict` 串接模型輸出 | 待填 | 待填 | 預測 API | 實際完成者 | High | TASK-110 |
+| TASK-117 | `/api/optimize` 串接最佳化結果 | 待填 | 待填 | 最佳化 API | 實際完成者 | High | TASK-113 |
+| TASK-118 | RBAC role header 與 403 測試 | 待填 | 待填 | 權限測試紀錄 | 實際完成者 | High | TASK-117 |
+| TASK-119 | Dashboard wireframe | 待填 | 待填 | Dashboard 草圖 | 實際完成者 | Medium | TASK-101 |
+| TASK-120 | Dashboard API 串接與 Role Switcher | 待填 | 待填 | 前後端串接畫面 | 實際完成者 | High | TASK-115 到 TASK-118 |
+| TASK-121 | 月份、地區、運送模式圖表 | 待填 | 待填 | Dashboard 圖表 | 實際完成者 | High | TASK-104 |
+| TASK-122 | 下拉式特徵選單與 submit | 待填 | 待填 | 互動控制項 | 實際完成者 | Medium | TASK-120 |
+| TASK-123 | LLM 或規則式白話解釋 | 待填 | 待填 | 主管版解釋文字 | 實際完成者 | Medium | TASK-110 |
+| TASK-124 | 老師八點建議回應頁 | 待填 | 待填 | 建議回應頁 | 實際完成者 | High | TASK-120 到 TASK-123 |
+| TASK-125 | 最終簡報與 Demo 截圖 | 待填 | 待填 | 簡報與截圖 | 實際完成者 | High | 核心功能完成 |
+| TASK-126 | Final integration rehearsal | 全員 | 全員 | 彩排紀錄 | 分段報告 | High | 全部核心任務 |
 
 ---
 
-## 8. 每位成員簡報負責段落
+## 9. 每位成員簡報負責方式
 
-| 成員 | 建議簡報段落 | 說明重點 |
+簡報不再固定指定誰講資料、誰講模型、誰講 API。改為每位成員報告自己實際完成的任務，並在簡報頁上標註貢獻項目。
+
+| 報告段落 | 由誰報告 | 說明重點 |
 |---|---|---|
-| Danny | 專案定位、系統架構、最佳化決策 | 為什麼不是只做預測，而是做可執行調度 |
-| Lisa | 資料集、EDA、去識別化 | 資料來源、欄位處理、隱私保護 |
-| 子堯 | 模型方法與評估 | XGBoost、指標、資料洩漏控制、特徵重要性 |
-| Bright | 後端 API 與 RBAC | API 設計、Viewer/Manager 權限、403 驗證 |
-| 紹光 | Dashboard 與 Demo | UI 流程、角色切換、最終展示情境 |
+| 專案定位與商業問題 | 實際參與 scope / demo flow 的成員 | 為什麼不是只做預測，而是做可執行調度 |
+| 資料集、EDA、去識別化 | 實際參與 DATA 任務的成員 | 資料來源、欄位處理、隱私保護、延遲原因初步分析 |
+| 模型方法與評估 | 實際參與 MODEL 任務的成員 | XGBoost、指標、資料洩漏控制、特徵重要性 |
+| 最佳化與管理決策 | 實際參與 OPT 任務的成員 | 預算、commit 數量、如何選出建議調度訂單 |
+| 後端 API 與 RBAC | 實際參與 API 任務的成員 | API 設計、Viewer/Manager 權限、403 驗證 |
+| Dashboard 與互動功能 | 實際參與 UI 任務的成員 | KPI、圖表、風險訂單、下拉式選單、submit、LLM 解釋 |
+| 老師建議回應 | 全員或實際整理者 | 對應八點建議逐一說明已完成或規劃中的功能 |
+| Demo 與結論 | 全員共同彩排後分段 | 從資料、預測、決策到權限展示的完整流程 |
 
 ---
 
-## 9. 最終展示建議腳本
+## 10. 最終展示建議腳本
 
 1. 先講痛點：物流資源有限，不能所有訂單都升級，企業需要知道哪些訂單最值得處理。
 2. 展示資料：DataCo 供應鏈資料含訂單、客戶、產品、物流資訊。
@@ -458,20 +496,20 @@ I = Informed，需同步進度
 
 ---
 
-## 10. 主要風險與處理方式
+## 11. 主要風險與處理方式
 
 | 風險 | 影響 | 處理方式 |
 |---|---|---|
 | 資料洩漏導致模型分數虛高 | 報告可信度下降 | 明確排除結果欄位，主動在簡報說明 |
-| 前後端串接太晚 | Demo 不穩 | API 回傳格式先定義，前端可先用 mock data |
+| 前後端串接太晚 | Demo 不穩 | API 回傳格式先定義，前端可先用固定格式測試 JSON |
 | 最佳化模型太複雜 | 實作延遲 | MVP 用簡化 0/1 budget optimization |
 | RBAC 只做前端鎖定 | 安全性不足 | 後端也要實作權限判斷與 403 |
-| EDA 與模型敘事不一致 | 簡報邏輯斷裂 | Lisa 與子堯共用同一份欄位清單 |
+| EDA 與模型敘事不一致 | 簡報邏輯斷裂 | DATA 與 MODEL 任務認領者共用同一份欄位清單 |
 | 組員產出格式不一 | 整合成本高 | 統一輸出 CSV 欄位與 API JSON schema |
 
 ---
 
-## 11. 建議檔案結構
+## 12. 建議檔案結構
 
 ```text
 edis_logistics_optimization/
@@ -501,7 +539,7 @@ edis_logistics_optimization/
 
 ---
 
-## 12. API 回傳格式建議
+## 13. API 回傳格式建議
 
 ### `/api/metrics`
 
@@ -516,18 +554,24 @@ edis_logistics_optimization/
 }
 ```
 
-### `/api/predict`
+### `/api/predict?page=1&limit=50&min_p_late=0.5`
 
 ```json
-[
-  {
-    "order_id_hash": "a8f3...",
-    "shipping_mode": "Standard Class",
-    "order_region": "Western Europe",
-    "p_late": 0.82,
-    "risk_bucket": "High"
-  }
-]
+{
+  "count": 128,
+  "page": 1,
+  "limit": 50,
+  "min_p_late": 0.5,
+  "data": [
+    {
+      "order_id_hash": "a8f3...",
+      "shipping_mode": "Standard Class",
+      "order_region": "Western Europe",
+      "p_late": 0.82,
+      "risk_bucket": "High"
+    }
+  ]
+}
 ```
 
 ### `/api/optimize`
@@ -535,6 +579,7 @@ edis_logistics_optimization/
 ```json
 {
   "budget": 5000,
+  "commit_count": 50,
   "selected_orders": [
     {
       "order_id_hash": "a8f3...",
@@ -549,9 +594,20 @@ edis_logistics_optimization/
 }
 ```
 
+### `/api/explain`
+
+```json
+{
+  "order_id_hash": "a8f3...",
+  "p_late": 0.82,
+  "top_reasons": ["Standard Class", "High-risk region", "Peak month"],
+  "manager_summary": "這筆訂單延遲風險偏高，建議在預算允許時優先升級運送。"
+}
+```
+
 ---
 
-## 13. 參考資料
+## 14. 參考資料
 
 - Kaggle DataCo SMART SUPPLY CHAIN FOR BIG DATA ANALYSIS：`https://www.kaggle.com/datasets/shashwatwork/dataco-smart-supply-chain-for-big-data-analysis`
 - Mendeley Data 原始資料集 DOI：`10.17632/8gx2fvg2k6.5`
