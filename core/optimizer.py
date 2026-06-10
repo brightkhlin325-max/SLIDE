@@ -90,11 +90,11 @@ class ShippingOptimizer:
         Parameters
         ----------
         budget : float
-            物流預算上限（元）
+            物流預算上限（USD）
         upgrade_cost : float
-            每筆訂單升級費用（元）
+            每筆訂單升級費用（USD）
         delay_penalty : float
-            每筆訂單延遲罰款估計（元）
+            每筆訂單延遲罰款估計（USD）
         risk_threshold : float
             只對延遲機率高於此值的訂單進行最佳化決策
         max_candidates : int
@@ -131,7 +131,7 @@ class ShippingOptimizer:
 
         print("=" * 60)
         print("EDIS ShippingOptimizer — 開始執行")
-        print(f"  預算：NT$ {self.budget:,.0f}")
+        print(f"  預算：USD ${self.budget:,.0f}")
         print("=" * 60)
 
         # 載入預測資料
@@ -147,8 +147,8 @@ class ShippingOptimizer:
         self._save_results(result, output_dir)
 
         print(f"\n[Done] 最佳化完成：選出 {result.selected_count} 筆訂單升級")
-        print(f"  總升級成本：NT$ {result.total_cost:,.0f}（預算：{self.budget:,.0f}）")
-        print(f"  預期淨效益：NT$ {result.expected_total_saving:,.0f}")
+        print(f"  總升級成本：USD ${result.total_cost:,.0f}（預算：USD ${self.budget:,.0f}）")
+        print(f"  預期淨效益：USD ${result.expected_total_saving:,.0f}")
         print("=" * 60)
 
         return result
@@ -312,7 +312,7 @@ class ShippingOptimizer:
         return (
             f"{risk_bucket} risk, "
             f"p_late={float(row['p_late']):.2f}, "
-            f"net benefit NT$ {float(row['net_benefit']):.0f}, "
+            f"net benefit USD ${float(row['net_benefit']):.0f}, "
             "within budget"
         )
 

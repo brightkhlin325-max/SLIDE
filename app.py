@@ -95,6 +95,14 @@ class OptimizeRequest(BaseModel):
     delay_penalty: float = 250.0
 
 
+def make_display_order_id(order_id: object) -> str:
+    """Return a short manager-friendly display ID while preserving the hash in APIs."""
+    if order_id is None:
+        return "ORD-UNKNOWN"
+    compact = "".join(ch for ch in str(order_id).upper() if ch.isalnum())
+    return f"ORD-{compact[:6]}" if compact else "ORD-UNKNOWN"
+
+
 # ── RBAC 工具函數 ─────────────────────────────────────────────────────────────
 
 def get_role(x_role: Optional[str]) -> str:
@@ -132,7 +140,7 @@ async def root():
         "system": "EDIS — DataCo 物流延遲預測與最佳化調度系統",
         "version": "1.0.0",
         "docs": "/docs",
-        "endpoints": ["/api/metrics", "/api/predict", "/api/optimize", "/api/upload"],
+        "endpoints": ["/api/metrics", "/api/predict", "/api/executive-summary", "/api/scenario-analysis", "/api/optimize", "/api/upload"],
     }
 
 
@@ -376,6 +384,7 @@ async def get_predictions(
         
         result.append({
             "order_id_hash": rec.get("order_id_hash"),
+            "display_order_id": make_display_order_id(rec.get("order_id_hash")),
             "shipping_mode": rec.get("shipping_mode"),
             "order_region": rec.get("order_region"),
             "p_late": rec.get("p_late"),
@@ -511,6 +520,87 @@ async def get_executive_summary(
         "top_regions": top_breakdown("order_region"),
         "top_shipping_modes": top_breakdown("shipping_mode"),
         "data_quality_note": "以目前 predictions.csv 計算；實務上應每日更新並與真實到貨結果回寫比對。",
+    }
+
+
+@app.get("/api/scenario-analysis")
+async def get_scenario_analysis(
+    budgets: str = "1000,3000,5000,10000",
+    upgrade_cost: float = 80.0,
+    delay_penalty: float = 250.0,
+):
+    """
+    [公開] 預算情境比較。
+
+    使用與正式最佳化相同的 PuLP MILP solver，讓主管比較不同預算下
+    可升級訂單數、預估淨效益、避免罰金與預算使用率。
+    """
+    if not PREDICTIONS_PATH.exists():
+        return {
+            "scenarios": [
+                {
+                    "budget": 1000.0,
+                    "selected_count": 12,
+                    "total_cost": 960.0,
+                    "expected_total_saving": 1890.0,
+                    "expected_total_penalty_avoided": 2850.0,
+                    "budget_usage_pct": 96.0,
+                    "solver": "demo response",
+                }
+            ],
+            "recommended_budget": 1000.0,
+            "recommendation": "示範資料：此預算可覆蓋高風險且 ROI 為正的訂單。",
+        }
+
+    if ShippingOptimizer is None:
+        raise HTTPException(status_code=500, detail="optimizer.py 載入失敗，無法執行情境分析。")
+
+    parsed_budgets: list[float] = []
+    for raw in budgets.split(","):
+        try:
+            value = float(raw.strip())
+        except ValueError:
+            continue
+        if value > 0:
+            parsed_budgets.append(value)
+    parsed_budgets = sorted(set(parsed_budgets))[:6]
+    if not parsed_budgets:
+        raise HTTPException(status_code=400, detail="budgets 至少需包含一個正數，例如 1000,3000,5000。")
+
+    scenarios = []
+    for budget in parsed_budgets:
+        optimizer = ShippingOptimizer(
+            budget=budget,
+            upgrade_cost=upgrade_cost,
+            delay_penalty=delay_penalty,
+            max_candidates=500,
+        )
+        result = optimizer.run(
+            predictions_path=str(PREDICTIONS_PATH),
+            output_dir=str(DATA_DIR),
+        ).to_dict()
+        scenarios.append({
+            "budget": budget,
+            "selected_count": result.get("selected_count", len(result.get("selected_orders", []))),
+            "total_cost": round(float(result.get("total_cost", 0.0)), 2),
+            "expected_total_saving": round(float(result.get("expected_total_saving", 0.0)), 2),
+            "expected_total_penalty_avoided": round(float(result.get("expected_total_penalty_avoided", 0.0)), 2),
+            "budget_usage_pct": round((float(result.get("total_cost", 0.0)) / budget * 100.0) if budget else 0.0, 2),
+            "solver": result.get("solver", "PuLP MILP"),
+        })
+
+    positive = [s for s in scenarios if s["expected_total_saving"] > 0]
+    best = max(positive or scenarios, key=lambda s: (s["expected_total_saving"], s["selected_count"]))
+    recommendation = (
+        f"建議至少保留 USD ${best['budget']:,.0f} 的升級預算；"
+        f"此情境可處理 {best['selected_count']} 筆訂單，"
+        f"預估淨效益 USD ${best['expected_total_saving']:,.0f}。"
+    )
+
+    return {
+        "scenarios": scenarios,
+        "recommended_budget": best["budget"],
+        "recommendation": recommendation,
     }
 
 

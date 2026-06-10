@@ -114,9 +114,9 @@ class ManagerExplainer:
         budget_usage = (total_cost / budget * 100.0) if budget else 0.0
 
         summary = (
-            f"建議主管核准本批調度：在預算 NT$ {budget:,.0f} 下，"
+            f"建議主管核准本批調度：在預算 USD ${budget:,.0f} 下，"
             f"使用 {solver} 選出 {selected_count} 筆升級訂單，"
-            f"預估淨效益 NT$ {expected_total_saving:,.0f}，預算使用率 {budget_usage:.0f}%。"
+            f"預估淨效益 USD ${expected_total_saving:,.0f}，預算使用率 {budget_usage:.0f}%。"
             f"主要調整方向是：{top_action}"
         )
 
@@ -243,8 +243,8 @@ class ManagerExplainer:
         return (
             f"此訂單延遲風險為 {risk_bucket}（p_late={p_late:.0%}），"
             f"目前運送模式為 {shipping_mode}，目的地為 {order_region or 'Unknown'}。"
-            f"若升級運送，預期可避免罰款 NT$ {expected_penalty:,.0f}，"
-            f"扣除升級成本 NT$ {upgrade_cost:,.0f} 後，淨效益約 NT$ {net_benefit:,.0f}。"
+            f"若升級運送，預期可避免罰款 USD ${expected_penalty:,.0f}，"
+            f"扣除升級成本 USD ${upgrade_cost:,.0f} 後，淨效益約 USD ${net_benefit:,.0f}。"
             f"主要 X 因子為：{factor_text}。建議：{action}。"
         )
 

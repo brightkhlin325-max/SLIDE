@@ -259,6 +259,17 @@ body {
   color: var(--muted);
 }
 
+.scenario-table-wrap {
+  margin-bottom: 18px;
+}
+
+.scenario-note {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
 @media (max-width: 1100px) {
   .exec-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -785,6 +796,34 @@ body {
         <div class="exec-action-body" id="execActionText">等待資料載入。</div>
       </div>
 
+      <div class="panel fade-in scenario-table-wrap">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">預算情境比較</div>
+            <div class="panel-subtitle">使用 MILP 比較不同物流預算下可救回的訂單與預估效益</div>
+          </div>
+          <span class="tag tag-count" id="scenarioCount">0 個情境</span>
+        </div>
+        <div class="table-scroll">
+          <table class="risk-table">
+            <thead>
+              <tr>
+                <th>預算</th>
+                <th>升級訂單</th>
+                <th>實際花費</th>
+                <th>避免罰金</th>
+                <th>預估淨效益</th>
+                <th>使用率</th>
+              </tr>
+            </thead>
+            <tbody id="scenarioTableBody">
+              <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--muted);font-size:13px">載入中...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="scenario-note" id="scenarioRecommendation">等待情境分析。</div>
+      </div>
+
       <!-- Two-col -->
       <div class="grid-2 fade-in">
         <!-- Boss Q&A panel -->
@@ -1272,6 +1311,7 @@ let totalRiskListCount = 0;
 
 // Cache for metrics & region risk
 let cachedRegions = null;
+let cachedScenarios = null;
 
 // ══ Navigation (SPA) ══
 function showPage(pageId) {
@@ -1317,6 +1357,13 @@ async function fetchExecutiveSummary() {
     .then(r => r.json());
 }
 
+async function fetchScenarioAnalysis() {
+  if (cachedScenarios) return cachedScenarios;
+  cachedScenarios = await fetch(`${API_BASE}/api/scenario-analysis?budgets=1000,3000,5000,10000`)
+    .then(r => r.json());
+  return cachedScenarios;
+}
+
 async function fetchPredictions(page = 1, search = '', risk = '', shipping = '', region = '') {
   let url = `${API_BASE}/api/predict?page=${page}&limit=${limit}&threshold=${threshold}`;
   if (search) url += `&search=${encodeURIComponent(search)}`;
@@ -1329,6 +1376,11 @@ async function fetchPredictions(page = 1, search = '', risk = '', shipping = '',
   }).then(r => r.json());
   
   return payload;
+}
+
+function displayOrderId(orderId) {
+  const raw = String(orderId || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  return raw ? `ORD-${raw.slice(0, 6)}` : 'ORD-UNKNOWN';
 }
 
 async function fetchOptimize(budget, upgradeCost, delayPenalty) {
@@ -1482,6 +1534,30 @@ function renderExecutiveSummary(d) {
     `${d.recommended_action} ${d.data_quality_note || ''}`;
 }
 
+function renderBudgetScenarios(d) {
+  const scenarios = d.scenarios || [];
+  document.getElementById('scenarioCount').textContent = `${scenarios.length} 個情境`;
+  document.getElementById('scenarioRecommendation').textContent =
+    d.recommendation || '目前沒有可用的預算情境建議。';
+
+  const tbody = document.getElementById('scenarioTableBody');
+  if (!scenarios.length) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--muted);font-size:13px">尚無情境資料</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = scenarios.map(s => `
+    <tr>
+      <td><span class="order-id">$${Math.round(s.budget).toLocaleString()}</span></td>
+      <td>${Number(s.selected_count || 0).toLocaleString()} 筆</td>
+      <td>$${Math.round(s.total_cost || 0).toLocaleString()}</td>
+      <td>$${Math.round(s.expected_total_penalty_avoided || 0).toLocaleString()}</td>
+      <td style="font-weight:700;color:${(s.expected_total_saving || 0) >= 0 ? '#15803d' : '#b91c1c'}">$${Math.round(s.expected_total_saving || 0).toLocaleString()}</td>
+      <td>${Number(s.budget_usage_pct || 0).toFixed(0)}%</td>
+    </tr>
+  `).join('');
+}
+
 function fillClass(p) {
   return p >= 0.7 ? 'fill-high' : p >= 0.4 ? 'fill-med' : 'fill-low';
 }
@@ -1527,7 +1603,7 @@ function renderBossTable(data) {
   
   tbody.innerHTML = delayed.map(o => `
     <tr>
-      <td><span class="order-id" style="cursor:pointer; text-decoration:underline;" onclick="openExplainModal('${o.order_id_hash}')">${o.order_id_hash.substring(0, 16)}...</span></td>
+      <td><span class="order-id" title="${o.order_id_hash}" style="cursor:pointer; text-decoration:underline;" onclick="openExplainModal('${o.order_id_hash}')">${o.display_order_id || displayOrderId(o.order_id_hash)}</span></td>
       <td>${o.shipping_mode || 'Unknown'}</td>
       <td style="color:var(--muted)">${o.order_region || 'Unknown'}</td>
       <td>
@@ -1558,7 +1634,7 @@ function renderOptResult(d) {
   document.getElementById('ordList').innerHTML = _sel.map((o, i) => `
     <div class="ord-item" style="animation-delay:${i*0.07}s">
       <div>
-        <div class="ord-id">${o.order_id_hash}</div>
+        <div class="ord-id" title="${o.order_id_hash}">${o.display_order_id || displayOrderId(o.order_id_hash)}</div>
         <div class="ord-sub">升級成本 $${o.upgrade_cost} · 延遲率 ${(o.p_late*100).toFixed(0)}% · ${o.reason || 'positive net benefit'}</div>
       </div>
       <div class="ord-saving">+$${(o.net_benefit ?? o.expected_saving).toLocaleString()}</div>
@@ -1706,7 +1782,7 @@ async function runPageOptimize() {
     document.getElementById('optPageOrdList').innerHTML = data.selected_orders.map((o, i) => `
       <div class="ord-item" style="animation-delay:${i*0.03}s">
         <div>
-          <div class="ord-id">${o.order_id_hash}</div>
+          <div class="ord-id" title="${o.order_id_hash}">${o.display_order_id || displayOrderId(o.order_id_hash)}</div>
           <div class="ord-sub">升級成本 $${o.upgrade_cost} · 延遲機率 ${(o.p_late*100).toFixed(0)}% · ${o.reason || 'positive net benefit'}</div>
         </div>
         <div class="ord-saving">+$${(o.net_benefit ?? o.expected_saving).toLocaleString()}</div>
@@ -1783,7 +1859,7 @@ async function loadFilteredRiskList() {
 
     tbody.innerHTML = data.map(o => `
       <tr>
-        <td><span class="order-id">${o.order_id_hash}</span></td>
+        <td><span class="order-id" title="${o.order_id_hash}">${o.display_order_id || displayOrderId(o.order_id_hash)}</span></td>
         <td>${o.shipping_mode || 'Unknown'}</td>
         <td style="color:var(--muted)">${o.order_region || 'Unknown'}</td>
         <td>
@@ -1875,7 +1951,7 @@ async function loadModelPerformance() {
     } else {
       errorBody.innerHTML = errors.map(o => `
         <tr>
-          <td><span class="order-id" style="cursor:pointer; text-decoration:underline;" onclick="openExplainModal('${o.order_id_hash}')">${o.order_id_hash.substring(0, 16)}...</span></td>
+          <td><span class="order-id" title="${o.order_id_hash}" style="cursor:pointer; text-decoration:underline;" onclick="openExplainModal('${o.order_id_hash}')">${o.display_order_id || displayOrderId(o.order_id_hash)}</span></td>
           <td>${o.shipping_mode}</td>
           <td>${o.order_region}</td>
           <td>${(o.p_late*100).toFixed(0)}%</td>
@@ -1900,7 +1976,8 @@ async function loadModelPerformance() {
 // ══ Explain Modal (LIME Local Attribution) ══
 async function openExplainModal(orderId) {
   const modal = document.getElementById('explainModal');
-  document.getElementById('modalOrderId').textContent = orderId;
+  document.getElementById('modalOrderId').textContent = displayOrderId(orderId);
+  document.getElementById('modalOrderId').title = orderId;
   document.getElementById('modalProb').textContent = '讀取中...';
   document.getElementById('modalPenalty').textContent = '讀取中...';
   document.getElementById('modalSummaryText').textContent = '讀取中...';
@@ -1944,9 +2021,10 @@ function closeExplainModal() {
 // ══ Dashboard Refresh Helper ══
 async function refreshDashboard() {
   try {
-    const [p, executive] = await Promise.all([
+    const [p, executive, scenarios] = await Promise.all([
       fetchPredictions(currentPage),
-      fetchExecutiveSummary()
+      fetchExecutiveSummary(),
+      fetchScenarioAnalysis()
     ]);
     if (p) {
       totalPredictionsCount = p.count || 0;
@@ -1956,6 +2034,7 @@ async function refreshDashboard() {
       if (m) renderMetrics(m);
     }
     if (executive) renderExecutiveSummary(executive);
+    if (scenarios) renderBudgetScenarios(scenarios);
   } catch (e) {
     console.error('Failed to refresh dashboard', e);
   }
