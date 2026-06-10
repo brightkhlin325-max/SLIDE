@@ -257,6 +257,18 @@ async def get_predictions(
     end_idx = start_idx + limit
     df_page = df.iloc[start_idx:end_idx]
 
+    # 相容 true_label → actual_late
+    if "true_label" in df_page.columns and "actual_late" not in df_page.columns:
+        df_page = df_page.copy()
+        df_page["actual_late"] = df_page["true_label"].astype(int)
+
+    # 計算 is_correct（預測值 vs 實際值）
+    if "actual_late" in df_page.columns and "p_late" in df_page.columns:
+        df_page = df_page.copy() if "actual_late" not in df_page.columns else df_page
+        df_page["is_correct"] = (
+            (df_page["p_late"] >= 0.5).astype(int) == df_page["actual_late"].astype(int)
+        )
+
     # 確保只回傳去識別化欄位
     safe_cols = [
         c for c in [
@@ -267,6 +279,8 @@ async def get_predictions(
             "risk_bucket",
             "upgrade_cost",
             "expected_penalty",
+            "actual_late",
+            "is_correct",
         ]
         if c in df_page.columns
     ]

@@ -731,10 +731,12 @@ body {
                   <th>地區</th>
                   <th>延遲機率</th>
                   <th>風險等級</th>
+                  <th>實際結果 (Y)</th>
+                  <th>預測正確？(Ŷ)</th>
                 </tr>
               </thead>
               <tbody id="riskTableBody">
-                <tr><td colspan="5" style="text-align:center;padding:32px;color:var(--muted);font-size:13px">
+                <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted);font-size:13px">
                   載入中...
                 </td></tr>
               </tbody>
@@ -882,10 +884,12 @@ body {
                 <th>地區</th>
                 <th>延遲機率</th>
                 <th>風險等級</th>
+                <th>實際結果 (Y)</th>
+                <th>預測正確？(Ŷ)</th>
               </tr>
             </thead>
             <tbody id="riskListTableBody">
-              <tr><td colspan="5" style="text-align:center;padding:32px;color:var(--muted);font-size:13px">載入中...</td></tr>
+              <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted);font-size:13px">載入中...</td></tr>
             </tbody>
           </table>
         </div>
@@ -1362,6 +1366,8 @@ function renderPredictions(data) {
         </div>
       </td>
       <td><span class="risk-pill ${pillClass(o.risk_bucket)}">${o.risk_bucket}</span></td>
+      <td>${o.actual_late===1||o.actual_late===true?'<span style="padding:2px 8px;background:#fee2e2;color:#b91c1c;border-radius:12px;font-size:10px;font-weight:600;">延遲</span>':o.actual_late===0||o.actual_late===false?'<span style="padding:2px 8px;background:#dcfce7;color:#15803d;border-radius:12px;font-size:10px;font-weight:600;">準時</span>':'<span style="color:var(--muted);font-size:12px;">—</span>'}</td>
+      <td>${o.is_correct===true?'<span style="padding:2px 8px;background:#dcfce7;color:#15803d;border-radius:12px;font-size:10px;font-weight:600;">✓ 正確</span>':o.is_correct===false?'<span style="padding:2px 8px;background:#fee2e2;color:#b91c1c;border-radius:12px;font-size:10px;font-weight:600;">✗ 錯誤</span>':'<span style="color:var(--muted);font-size:12px;">—</span>'}</td>
     </tr>
   `).join('');
 }
@@ -1499,7 +1505,7 @@ async function changePage(delta) {
   if (newPage >= 1 && newPage <= totalPages) {
     currentPage = newPage;
     document.getElementById('riskTableBody').innerHTML = `
-      <tr><td colspan="5" style="text-align:center;padding:32px;color:var(--muted);font-size:13px">載入中...</td></tr>
+      <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted);font-size:13px">載入中...</td></tr>
     `;
     const p = await fetchPredictions(currentPage);
     if (p) {
@@ -1523,22 +1529,22 @@ async function loadFilteredRiskList() {
   
   const tbody = document.getElementById('riskListTableBody');
   tbody.innerHTML = `
-    <tr><td colspan="5" style="text-align:center;padding:32px;color:var(--muted);font-size:13px">載入中...</td></tr>
+    <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted);font-size:13px">載入中...</td></tr>
   `;
 
   try {
     const payload = await fetchPredictions(currentRiskListPage, search, risk, shipping, region);
     if (!payload) return;
-    
+
     totalRiskListCount = payload.count || 0;
     document.getElementById('riskListCount').textContent = `共 ${totalRiskListCount} 筆`;
-    
+
     const totalPages = Math.ceil(totalRiskListCount / limit) || 1;
     document.getElementById('riskListPageIndicator').textContent = `第 ${currentRiskListPage} / ${totalPages} 頁`;
-    
+
     const prevBtn = document.getElementById('riskListPrevBtn');
     const nextBtn = document.getElementById('riskListNextBtn');
-    
+
     prevBtn.disabled = currentRiskListPage <= 1;
     nextBtn.disabled = currentRiskListPage >= totalPages;
     prevBtn.style.opacity = currentRiskListPage <= 1 ? 0.5 : 1;
@@ -1547,7 +1553,7 @@ async function loadFilteredRiskList() {
     const data = payload.data || [];
     if (data.length === 0) {
       tbody.innerHTML = `
-        <tr><td colspan="5" style="text-align:center;padding:32px;color:var(--muted);font-size:13px">無符合篩選條件的訂單</td></tr>
+        <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted);font-size:13px">無符合篩選條件的訂單</td></tr>
       `;
       return;
     }
@@ -1564,12 +1570,14 @@ async function loadFilteredRiskList() {
           </div>
         </td>
         <td><span class="risk-pill ${pillClass(o.risk_bucket)}">${o.risk_bucket}</span></td>
+        <td>${o.actual_late===1||o.actual_late===true?'<span style="padding:2px 8px;background:#fee2e2;color:#b91c1c;border-radius:12px;font-size:10px;font-weight:600;">延遲</span>':o.actual_late===0||o.actual_late===false?'<span style="padding:2px 8px;background:#dcfce7;color:#15803d;border-radius:12px;font-size:10px;font-weight:600;">準時</span>':'<span style="color:var(--muted);font-size:12px;">—</span>'}</td>
+        <td>${o.is_correct===true?'<span style="padding:2px 8px;background:#dcfce7;color:#15803d;border-radius:12px;font-size:10px;font-weight:600;">✓ 正確</span>':o.is_correct===false?'<span style="padding:2px 8px;background:#fee2e2;color:#b91c1c;border-radius:12px;font-size:10px;font-weight:600;">✗ 錯誤</span>':'<span style="color:var(--muted);font-size:12px;">—</span>'}</td>
       </tr>
     `).join('');
 
   } catch (e) {
     tbody.innerHTML = `
-      <tr><td colspan="5" style="text-align:center;padding:32px;color:red;font-size:13px">資料載入失敗: ${e.message}</td></tr>
+      <tr><td colspan="7" style="text-align:center;padding:32px;color:red;font-size:13px">資料載入失敗: ${e.message}</td></tr>
     `;
   }
 }
