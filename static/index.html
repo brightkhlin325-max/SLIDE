@@ -1008,9 +1008,111 @@ body {
     <div class="page-section hidden" id="page-optimization">
       <div class="page-header fade-in">
         <div class="page-title">最佳化調度</div>
-        <div class="page-sub">在給定的物流預算限制下，使用整數規劃模型計算產出最佳調度方案</div>
+        <div class="page-sub">月份誤差診斷 → 模型重訓 · 訂單升級調度</div>
       </div>
-      
+
+      <!-- ① 月份 Flipper（診斷入口） -->
+      <div id="monthlyFlipperPanel" class="panel fade-in" style="margin-bottom:24px;">
+        <div class="panel-head">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:16px;">📈</span>
+            <div>
+              <div class="panel-title">月份延遲誤差追蹤</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;">
+                預測 Ŷ vs 實際 Y · 誤差超過
+                <span id="flipThresholdLabel" style="font-weight:700;color:var(--navy);">5%</span>
+                才顯示診斷按鈕
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="font-size:11px;color:var(--muted);white-space:nowrap;">診斷閾值：</span>
+              <input type="number" id="flipThresholdInput" value="5" min="1" max="50" step="1"
+                onchange="updateFlipThreshold(this.value)"
+                style="width:52px;padding:4px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-weight:700;color:var(--navy);text-align:center;outline:none;">
+              <span style="font-size:11px;color:var(--muted);">%</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="font-size:11px;color:var(--muted);">跳至：</span>
+              <select id="monthFlipSelect" onchange="jumpToFlipPage(parseInt(this.value))"
+                style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--text);outline:none;cursor:pointer;">
+              </select>
+            </div>
+          </div>
+        </div>
+        <div style="padding:16px 20px 20px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+            <button onclick="flipPage(-1)" id="flipPrevBtn"
+              style="display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:6px;border:1.5px solid var(--border);background:white;font-size:12px;font-weight:600;cursor:pointer;color:var(--text);transition:all 0.15s;"
+              onmouseover="this.style.background='var(--navy)';this.style.color='#fff';this.style.borderColor='var(--navy)'"
+              onmouseout="this.style.background='white';this.style.color='var(--text)';this.style.borderColor='var(--border)'">&#9664; 上一組</button>
+            <div id="flipPageRangeLabel" style="font-size:13px;font-weight:600;color:var(--text);font-family:'DM Mono',monospace;">載入中…</div>
+            <button onclick="flipPage(1)" id="flipNextBtn"
+              style="display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:6px;border:1.5px solid var(--border);background:white;font-size:12px;font-weight:600;cursor:pointer;color:var(--text);transition:all 0.15s;"
+              onmouseover="this.style.background='var(--navy)';this.style.color='#fff';this.style.borderColor='var(--navy)'"
+              onmouseout="this.style.background='white';this.style.color='var(--text)';this.style.borderColor='var(--border)'">下一組 &#9654;</button>
+          </div>
+          <div id="flipperGrid" style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;"></div>
+        </div>
+      </div>
+
+      <!-- 診斷 Modal -->
+      <div id="monthDiagnoseModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.45);z-index:1000;align-items:center;justify-content:center;padding:20px;">
+        <div style="background:white;border-radius:10px;width:100%;max-width:560px;padding:24px;box-shadow:0 10px 30px rgba(0,0,0,0.15);position:relative;max-height:90vh;overflow-y:auto;">
+          <button onclick="closeDiagnoseModal()" style="position:absolute;top:14px;right:18px;border:none;background:transparent;font-size:22px;cursor:pointer;color:var(--muted);">&times;</button>
+          <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;">🔎 <span id="diagMonthTitle">—</span> 誤差診斷</div>
+          <div id="diagMonthSummary" style="font-size:12px;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:16px;">—</div>
+
+          <!-- LIME 特徵 -->
+          <div style="margin-bottom:16px;">
+            <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;font-family:'DM Mono',monospace;margin-bottom:8px;">主要誤差貢獻特徵（LIME 聚合）</div>
+            <div id="diagFactors" style="display:flex;flex-direction:column;gap:8px;"><div style="color:var(--muted);font-size:12px;">載入中…</div></div>
+          </div>
+
+          <!-- 分步驟區（Step 1 事件判斷 / Step 2 重訓）-->
+          <div id="diagStep1" style="border-top:1px solid var(--border);padding-top:14px;">
+            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px;">此月誤差是否來自外部偶發事件？</div>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;">
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;"><input type="radio" name="diagEventType" value="颱風/天災" style="accent-color:var(--navy);"> 颱風 / 天災</label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;"><input type="radio" name="diagEventType" value="假期/節慶" style="accent-color:var(--navy);"> 假期 / 節慶（春節、聖誕等）</label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;"><input type="radio" name="diagEventType" value="供應鏈中斷" style="accent-color:var(--navy);"> 供應鏈中斷（港口罷工、疫情等）</label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;"><input type="radio" name="diagEventType" value="其他" style="accent-color:var(--navy);"> 其他</label>
+            </div>
+            <input type="text" id="diagEventNote" placeholder="備註說明（選填）"
+              style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;outline:none;box-sizing:border-box;margin-bottom:12px;">
+            <div id="diagManagerActions" style="display:flex;flex-direction:column;gap:8px;">
+              <button onclick="flagMonthEvent()" id="diagFlagBtn"
+                style="padding:10px;background:#fff7ed;border:1.5px solid #fed7aa;border-radius:6px;font-size:13px;font-weight:600;color:#c2410c;cursor:pointer;">
+                標記為外部事件，排除重訓考量
+              </button>
+              <button onclick="showRetrainStep()" id="diagRetrainBtn"
+                style="padding:10px;background:var(--navy);border:none;border-radius:6px;font-size:13px;font-weight:600;color:#fff;cursor:pointer;">
+                非偶發事件 → 繼續重訓模型
+              </button>
+            </div>
+            <div id="diagViewerNote" style="display:none;text-align:center;font-size:12px;color:var(--muted);padding:8px;background:var(--bg);border-radius:6px;">
+              🔒 需要 Manager 權限才能執行標記或重訓操作
+            </div>
+          </div>
+
+          <!-- Step 2：特徵排除 + 重訓 -->
+          <div id="diagStep2" style="display:none;border-top:1px solid var(--border);padding-top:14px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+              <div style="font-size:13px;font-weight:600;color:var(--text);">選擇要排除的問題特徵</div>
+              <button onclick="backToStep1()" style="font-size:11px;color:var(--muted);background:transparent;border:none;cursor:pointer;">← 返回</button>
+            </div>
+            <div id="diagFeatureCheckboxes" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;"></div>
+            <button onclick="startRetrain()" id="diagStartRetrainBtn"
+              style="width:100%;padding:10px;background:#16a34a;border:none;border-radius:6px;font-size:13px;font-weight:600;color:#fff;cursor:pointer;">
+              ▶ 開始重訓模型
+            </button>
+            <div id="diagRetrainStatus" style="display:none;text-align:center;padding:12px;font-size:13px;color:var(--muted);">重訓中，請稍候…</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ② 訂單升級調度（原有功能，標題調整） -->
       <div class="grid-2 fade-in">
         <!-- Input controls -->
         <div class="panel" style="height: fit-content;">
@@ -1213,6 +1315,43 @@ body {
           </table>
         </div>
       </div>
+
+      <!-- 重訓比對區塊（從最佳化調度點繼續重訓後顯示） -->
+      <div id="retrainResultPanel" style="display:none;margin-top:24px;" class="panel fade-in">
+        <div class="panel-head">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:16px;">🔧</span>
+            <div>
+              <div class="panel-title">模型重訓比對結果</div>
+              <div id="retrainResultSubtitle" style="font-size:12px;color:var(--muted);margin-top:2px;">—</div>
+            </div>
+          </div>
+          <span id="retrainResultBadge" style="padding:4px 10px;border-radius:12px;font-size:11px;font-weight:600;background:#dcfce7;color:#16a34a;">新模型就緒</span>
+        </div>
+        <div style="padding:20px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:20px;">
+            <div>
+              <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;">舊模型</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;" id="oldMetricsGrid"></div>
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;">新模型（重訓後）</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;" id="newMetricsGrid"></div>
+            </div>
+          </div>
+          <div id="droppedColsNote" style="font-size:11px;color:var(--muted);padding:8px 12px;background:var(--bg);border-radius:6px;margin-bottom:16px;font-family:'DM Mono',monospace;"></div>
+          <div id="retrainManagerBtns" style="display:flex;gap:12px;">
+            <button onclick="adoptNewModel()" id="adoptBtn"
+              style="flex:1;padding:10px;background:#16a34a;border:none;border-radius:6px;font-size:13px;font-weight:600;color:#fff;cursor:pointer;">
+              ✓ 採用新模型
+            </button>
+            <button onclick="discardNewModel()" id="discardBtn"
+              style="flex:1;padding:10px;background:white;border:1.5px solid var(--border);border-radius:6px;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;">
+              ✗ 捨棄，保留舊模型
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- E. REGIONAL RISK MAP PANEL -->
@@ -1350,6 +1489,8 @@ function showPage(pageId) {
   if (pageId === 'risk-list') {
     populateRegionDropdown();
     applyFilters();
+  } else if (pageId === 'optimization') {
+    loadMonthlyChart();
   } else if (pageId === 'model-perf') {
     loadModelPerformance();
   } else if (pageId === 'region-map') {
@@ -2084,47 +2225,19 @@ async function init() {
   }
 }
 init();
-// ══ Feature 3：月份延遲趨勢圖 ══
-let monthlyChart = null;
-let monthlyData = { labels: [], yhat: [], yact: [] };
-let currentChartType = 'line';
+// ══ Feature 3：月份 Flipper（6 格 × 最佳化調度頁） ══
+let monthlyAllData  = [];
+let flipperPageStart = 0;
+const FLIPPER_PAGE_SIZE = 6;
+let FLIP_THRESHOLD = 0.05;
 
-function buildMonthlyChart(type) {
-  const ctx = document.getElementById('monthlyChartCanvas');
-  if (!ctx) return;
-  if (monthlyChart) { monthlyChart.destroy(); monthlyChart = null; }
-  const { labels, yhat, yact } = monthlyData;
-  monthlyChart = new Chart(ctx, {
-    type: type === 'bar' ? 'bar' : 'line',
-    data: {
-      labels,
-      datasets: [
-        { label: '預測延遲率 Ŷ (%)', data: yhat, borderColor: '#437096', backgroundColor: type==='bar'?'rgba(67,112,150,0.7)':'rgba(67,112,150,0.15)', fill: type!=='bar', tension: 0.35, pointRadius: 3, borderWidth: 2 },
-        { label: '實際延遲率 Y (%)',  data: yact, borderColor: '#e07b54', backgroundColor: type==='bar'?'rgba(224,123,84,0.7)':'rgba(224,123,84,0.15)',  fill: type!=='bar', tension: 0.35, borderDash: type==='bar'?[]:[5,4], pointRadius: 4, borderWidth: 2 }
-      ]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: { position: 'top', labels: { font: { size: 12 }, color: '#2d3340' } },
-        tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y}%` } }
-      },
-      scales: {
-        x: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { font: { size: 10 }, color: '#8a939e', maxTicksLimit: 8, maxRotation: 45, autoSkip: true } },
-        y: { min: 0, max: 100, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { font: { size: 11 }, color: '#8a939e', callback: v => v + '%' } }
-      }
-    }
-  });
-}
-
-function switchChartType(type) {
-  if (type === currentChartType) return;
-  currentChartType = type;
-  const bl = document.getElementById('btnLine'), bb = document.getElementById('btnBar');
-  if (bl) { bl.style.background = type==='line'?'var(--navy)':'transparent'; bl.style.color = type==='line'?'#fff':'var(--muted)'; bl.style.border = '1.5px solid '+(type==='line'?'var(--navy)':'var(--border)'); }
-  if (bb) { bb.style.background = type==='bar' ?'var(--navy)':'transparent'; bb.style.color = type==='bar' ?'#fff':'var(--muted)'; bb.style.border = '1.5px solid '+(type==='bar' ?'var(--navy)':'var(--border)'); }
-  buildMonthlyChart(type);
+function updateFlipThreshold(val) {
+  const v = parseFloat(val);
+  if (isNaN(v) || v < 1 || v > 50) return;
+  FLIP_THRESHOLD = v / 100;
+  const lbl = document.getElementById('flipThresholdLabel');
+  if (lbl) lbl.textContent = v + '%';
+  renderFlipperPage(flipperPageStart);
 }
 
 async function loadMonthlyChart() {
@@ -2132,13 +2245,334 @@ async function loadMonthlyChart() {
     const res = await fetch(`${API_BASE}/api/chart/monthly`);
     if (!res.ok) return;
     const json = await res.json();
-    const data = Array.isArray(json) ? json : (json.data || []);
-    monthlyData.labels = data.map(d => d.month);
-    monthlyData.yhat   = data.map(d => d.avg_p_late        != null ? +(d.avg_p_late * 100).toFixed(1)        : null);
-    monthlyData.yact   = data.map(d => d.actual_late_rate  != null ? +(d.actual_late_rate * 100).toFixed(1)  : null);
-    document.getElementById('monthlyChartPanel').style.display = 'block';
-    buildMonthlyChart(currentChartType);
-  } catch(e) { console.warn('Monthly chart failed:', e); }
+    monthlyAllData = Array.isArray(json) ? json : (json.data || []);
+    if (!monthlyAllData.length) return;
+
+    const sel = document.getElementById('monthFlipSelect');
+    if (sel) {
+      const opts = [];
+      for (let i = 0; i < monthlyAllData.length; i += FLIPPER_PAGE_SIZE) {
+        opts.push(`<option value="${i}">${monthlyAllData[i].month}</option>`);
+      }
+      sel.innerHTML = opts.join('');
+    }
+    flipperPageStart = 0;
+    renderFlipperPage(0);
+  } catch(e) { console.warn('Monthly Flipper load failed:', e); }
+}
+
+function renderFlipperPage(startIdx) {
+  if (!monthlyAllData.length) return;
+  startIdx = Math.max(0, Math.min(startIdx, monthlyAllData.length - 1));
+  flipperPageStart = startIdx;
+
+  const slice = monthlyAllData.slice(startIdx, startIdx + FLIPPER_PAGE_SIZE);
+  const threshPct = (FLIP_THRESHOLD * 100).toFixed(0);
+
+  const rangeEl = document.getElementById('flipPageRangeLabel');
+  if (rangeEl) rangeEl.textContent = `${slice[0]?.month || '—'} ～ ${slice[slice.length-1]?.month || '—'}`;
+
+  const sel = document.getElementById('monthFlipSelect');
+  if (sel) {
+    for (let i = 0; i < sel.options.length; i++) {
+      if (parseInt(sel.options[i].value) <= startIdx) sel.selectedIndex = i;
+    }
+  }
+
+  const prevBtn = document.getElementById('flipPrevBtn');
+  const nextBtn = document.getElementById('flipNextBtn');
+  if (prevBtn) prevBtn.style.opacity = startIdx === 0 ? '0.35' : '1';
+  if (nextBtn) nextBtn.style.opacity = (startIdx + FLIPPER_PAGE_SIZE >= monthlyAllData.length) ? '0.35' : '1';
+
+  const grid = document.getElementById('flipperGrid');
+  if (!grid) return;
+
+  grid.innerHTML = slice.map(d => {
+    const yPct    = d.actual_late_rate != null ? +(d.actual_late_rate * 100).toFixed(1) : null;
+    const yhatPct = d.avg_p_late       != null ? +(d.avg_p_late * 100).toFixed(1)       : null;
+    const errPct  = (yPct != null && yhatPct != null) ? +(Math.abs(yhatPct - yPct)).toFixed(1) : null;
+    const over    = errPct != null && errPct > (FLIP_THRESHOLD * 100);
+    const errColor   = over ? '#e07b54' : '#16a34a';
+    const cardBorder = over ? '2px solid #fed7aa' : '1px solid var(--border)';
+    const cardBg     = over ? '#fffbf7' : 'white';
+    const errLabel   = errPct != null
+      ? (over ? `${errPct}% &gt; ${threshPct}%` : `${errPct}% ✓`)
+      : '—';
+
+    const diagBtn = over
+      ? `<button onclick="openDiagnoseModal('${d.month}')"
+           style="width:100%;margin-top:10px;padding:7px 0;background:var(--navy);color:#fff;border:none;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer;"
+           onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">🔍 診斷</button>`
+      : `<div style="margin-top:10px;text-align:center;font-size:10px;color:#16a34a;font-weight:500;">✓ 正常範圍</div>`;
+
+    return `
+      <div style="border:${cardBorder};background:${cardBg};border-radius:8px;padding:12px;display:flex;flex-direction:column;">
+        <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px;">${d.month}</div>
+        <div style="font-size:10px;color:var(--muted);margin-bottom:8px;font-family:'DM Mono',monospace;">${d.total_orders != null ? d.total_orders.toLocaleString() + ' 筆' : '—'}</div>
+        <div style="font-size:10px;color:var(--muted);margin-bottom:3px;">Y 實際</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+          <div style="flex:1;height:8px;background:#f3f4f6;border-radius:4px;overflow:hidden;">
+            <div style="height:100%;width:${yPct!=null?Math.min(yPct,100):0}%;background:#e07b54;border-radius:4px;transition:width 0.5s;"></div>
+          </div>
+          <span style="font-size:10px;font-weight:700;color:#e07b54;min-width:34px;text-align:right;">${yPct!=null?yPct+'%':'—'}</span>
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-bottom:3px;">Ŷ 預測</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+          <div style="flex:1;height:8px;background:#f3f4f6;border-radius:4px;overflow:hidden;">
+            <div style="height:100%;width:${yhatPct!=null?Math.min(yhatPct,100):0}%;background:#437096;border-radius:4px;transition:width 0.5s;"></div>
+          </div>
+          <span style="font-size:10px;font-weight:700;color:#437096;min-width:34px;text-align:right;">${yhatPct!=null?yhatPct+'%':'—'}</span>
+        </div>
+        <div style="font-size:10px;font-weight:600;color:${errColor};padding:4px 6px;background:${over?'#fff7ed':'#f0fdf4'};border-radius:4px;text-align:center;">△ ${errLabel}</div>
+        ${diagBtn}
+      </div>`;
+  }).join('');
+}
+
+function flipPage(delta) {
+  renderFlipperPage(flipperPageStart + delta * FLIPPER_PAGE_SIZE);
+}
+
+function jumpToFlipPage(startIdx) {
+  renderFlipperPage(startIdx);
+}
+
+// ── 診斷 Modal ─────────────────────────────────────────────────────────────────
+let diagCurrentMonth = null;
+let diagCurrentFactors = [];
+let pendingRetrainSession = null;
+
+function openDiagnoseModal(month) {
+  if (!month) return;
+  diagCurrentMonth = month;
+  diagCurrentFactors = [];
+
+  document.getElementById('diagMonthTitle').textContent = month;
+  document.getElementById('diagMonthSummary').textContent = '載入中…';
+  document.getElementById('diagFactors').innerHTML = '<div style="color:var(--muted);font-size:12px;">LIME 分析中…</div>';
+  document.querySelectorAll('input[name="diagEventType"]').forEach(r => r.checked = false);
+  document.getElementById('diagEventNote').value = '';
+  document.getElementById('diagStep1').style.display = 'block';
+  document.getElementById('diagStep2').style.display = 'none';
+
+  const isManager = currentRole === 'manager';
+  document.getElementById('diagManagerActions').style.display = isManager ? 'flex' : 'none';
+  document.getElementById('diagViewerNote').style.display    = isManager ? 'none' : 'block';
+
+  const modal = document.getElementById('monthDiagnoseModal');
+  if (modal) modal.style.display = 'flex';
+
+  fetchDiagnoseData(month);
+}
+
+function closeDiagnoseModal() {
+  const modal = document.getElementById('monthDiagnoseModal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function fetchDiagnoseData(month) {
+  try {
+    const res = await fetch(`${API_BASE}/api/diagnose/monthly?month=${encodeURIComponent(month)}`);
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+
+    const yPct   = data.actual_late_rate != null ? (data.actual_late_rate * 100).toFixed(1) : '—';
+    const yPhat  = data.avg_p_late       != null ? (data.avg_p_late * 100).toFixed(1)       : '—';
+    const errPct = data.error            != null ? (data.error * 100).toFixed(1)             : '—';
+    document.getElementById('diagMonthSummary').textContent =
+      `Y=${yPct}%  Ŷ=${yPhat}%  誤差=${errPct}%  錯誤訂單=${(data.error_orders_count||0).toLocaleString()} / ${(data.total_orders||0).toLocaleString()} 筆`;
+
+    diagCurrentFactors = data.top_factors || [];
+    const facEl = document.getElementById('diagFactors');
+    if (!diagCurrentFactors.length) {
+      facEl.innerHTML = '<div style="font-size:12px;color:var(--muted);">無足夠誤差訂單可分析</div>';
+    } else {
+      const maxCnt = Math.max(...diagCurrentFactors.map(f => f.count || 1));
+      facEl.innerHTML = diagCurrentFactors.map((f, i) => {
+        const pct      = maxCnt > 0 ? Math.round((f.count / maxCnt) * 100) : 0;
+        const dirColor = f.direction === 'raises risk' ? '#e07b54' : '#437096';
+        return `<div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+            <span style="color:var(--text);font-weight:500;">${i+1}. ${f.feature}</span>
+            <span style="color:${dirColor};font-size:11px;">${f.direction==='raises risk'?'↑ 增加風險':'↓ 降低風險'}</span>
+          </div>
+          <div style="height:8px;background:var(--bg);border-radius:4px;overflow:hidden;">
+            <div style="height:100%;width:${pct}%;background:${dirColor};border-radius:4px;transition:width 0.4s;"></div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    if (data.event_flag) {
+      const match = document.querySelector(`input[name="diagEventType"][value="${data.event_flag.type}"]`);
+      if (match) match.checked = true;
+      if (data.event_flag.note) document.getElementById('diagEventNote').value = data.event_flag.note;
+    }
+  } catch(e) {
+    document.getElementById('diagMonthSummary').textContent = '載入失敗：' + e.message;
+  }
+}
+
+async function flagMonthEvent() {
+  const selected = document.querySelector('input[name="diagEventType"]:checked');
+  if (!selected) { alert('請先選擇事件類型'); return; }
+  const note  = document.getElementById('diagEventNote').value.trim();
+  const xRole = currentRole === 'manager' ? 'Logistics_Manager' : 'Viewer';
+  const btn   = document.getElementById('diagFlagBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '標記中…'; }
+  try {
+    const res = await fetch(`${API_BASE}/api/diagnose/monthly/flag`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Role': xRole },
+      body: JSON.stringify({ month: diagCurrentMonth, event_type: selected.value, note })
+    });
+    if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.detail || res.status); }
+    closeDiagnoseModal();
+    showToast(`已標記 ${diagCurrentMonth} 為「${selected.value}」`, 'success');
+    await loadMonthlyChart();
+  } catch(e) {
+    showToast('標記失敗：' + e.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '標記為外部事件，排除重訓考量'; }
+  }
+}
+
+function showRetrainStep() {
+  document.getElementById('diagStep1').style.display = 'none';
+  document.getElementById('diagStep2').style.display = 'block';
+
+  const cbEl = document.getElementById('diagFeatureCheckboxes');
+  if (!diagCurrentFactors.length) {
+    cbEl.innerHTML = '<div style="font-size:12px;color:var(--muted);">無可選擇的問題特徵</div>';
+    return;
+  }
+  cbEl.innerHTML = diagCurrentFactors.map((f, i) => `
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);">
+      <input type="checkbox" name="retrainFeature" value="${f.feature}" ${i < 2 ? 'checked' : ''} style="accent-color:var(--navy);">
+      <span style="flex:1;">${f.feature}</span>
+      <span style="font-size:11px;color:${f.direction==='raises risk'?'#e07b54':'#437096'};">${f.direction==='raises risk'?'↑ 高風險貢獻':'↓ 低風險貢獻'}</span>
+    </label>`).join('');
+}
+
+function backToStep1() {
+  document.getElementById('diagStep1').style.display = 'block';
+  document.getElementById('diagStep2').style.display = 'none';
+}
+
+async function startRetrain() {
+  const checked = [...document.querySelectorAll('input[name="retrainFeature"]:checked')];
+  if (!checked.length) { alert('請至少選擇一個要排除的特徵'); return; }
+  const excluded = checked.map(c => c.value);
+  const xRole = currentRole === 'manager' ? 'Logistics_Manager' : 'Viewer';
+
+  const btn    = document.getElementById('diagStartRetrainBtn');
+  const status = document.getElementById('diagRetrainStatus');
+  if (btn)    { btn.style.display    = 'none'; }
+  if (status) { status.style.display = 'block'; status.textContent = '重訓中，請稍候（可能需要 1-3 分鐘）…'; }
+
+  try {
+    const res = await fetch(`${API_BASE}/api/retrain`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Role': xRole },
+      body: JSON.stringify({ excluded_features: excluded })
+    });
+    if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.detail || res.status); }
+    const data = await res.json();
+    pendingRetrainSession = data.session_id;
+
+    closeDiagnoseModal();
+    showPage('model-perf');
+    renderRetrainResult(data);
+    showToast('重訓完成，請確認新舊指標後決定是否採用', 'success');
+  } catch(e) {
+    if (status) { status.textContent = '重訓失敗：' + e.message; status.style.color = '#e07b54'; }
+    if (btn) btn.style.display = 'block';
+    showToast('重訓失敗：' + e.message, 'error');
+  }
+}
+
+// ── 重訓比對結果 ────────────────────────────────────────────────────────────────
+function renderRetrainResult(data) {
+  const panel = document.getElementById('retrainResultPanel');
+  if (!panel) return;
+  panel.style.display = 'block';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  document.getElementById('retrainResultSubtitle').textContent =
+    `排除特徵：${(data.dropped_columns || []).join('、') || '無'} · Session: ${data.session_id}`;
+
+  const metricKeys = ['roc_auc', 'f1', 'precision', 'recall'];
+  const metricLabels = { roc_auc: 'ROC-AUC', f1: 'F1', precision: '精準率', recall: '召回率' };
+
+  function renderMetricGrid(elId, metrics, compareMetrics) {
+    const el = document.getElementById(elId);
+    if (!el || !metrics) return;
+    el.innerHTML = metricKeys.map(k => {
+      const v    = metrics[k]     != null ? (+metrics[k]).toFixed(4)     : '—';
+      const vCmp = compareMetrics && compareMetrics[k] != null ? +compareMetrics[k] : null;
+      const vNum = metrics[k] != null ? +metrics[k] : null;
+      let delta = '';
+      if (vNum != null && vCmp != null) {
+        const diff = ((vNum - vCmp) * 100).toFixed(2);
+        const isUp = vNum >= vCmp;
+        delta = `<span style="font-size:10px;margin-left:4px;color:${isUp?'#16a34a':'#e07b54'};">${isUp?'▲':'▼'} ${Math.abs(diff)}%</span>`;
+      }
+      return `<div class="stat-box"><div class="stat-label">${metricLabels[k]}</div><div class="stat-value" style="font-size:18px;">${v}${delta}</div></div>`;
+    }).join('');
+  }
+
+  renderMetricGrid('oldMetricsGrid', data.old_metrics, data.new_metrics);
+  renderMetricGrid('newMetricsGrid', data.new_metrics, data.old_metrics);
+
+  const noteEl = document.getElementById('droppedColsNote');
+  if (noteEl) noteEl.textContent = `已排除欄位（${(data.dropped_columns||[]).length} 個）：${(data.dropped_columns||[]).join(' · ') || '無'}`;
+}
+
+async function adoptNewModel() {
+  if (!pendingRetrainSession) return;
+  const xRole = currentRole === 'manager' ? 'Logistics_Manager' : 'Viewer';
+  const btn = document.getElementById('adoptBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '採用中…'; }
+  try {
+    const res = await fetch(`${API_BASE}/api/retrain/adopt`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Role': xRole },
+      body: JSON.stringify({ session_id: pendingRetrainSession })
+    });
+    if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.detail || res.status); }
+    document.getElementById('retrainResultPanel').style.display = 'none';
+    pendingRetrainSession = null;
+    showToast('新模型已採用並替換現有模型', 'success');
+    loadModelPerformance();
+  } catch(e) {
+    showToast('採用失敗：' + e.message, 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '✓ 採用新模型'; }
+  }
+}
+
+async function discardNewModel() {
+  if (!pendingRetrainSession) return;
+  const xRole = currentRole === 'manager' ? 'Logistics_Manager' : 'Viewer';
+  try {
+    await fetch(`${API_BASE}/api/retrain/discard`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Role': xRole },
+      body: JSON.stringify({ session_id: pendingRetrainSession })
+    });
+  } catch(e) {}
+  document.getElementById('retrainResultPanel').style.display = 'none';
+  pendingRetrainSession = null;
+  showToast('已捨棄新模型，現有模型不變', 'info');
+}
+
+function showToast(msg, type = 'info') {
+  const colors = { success: '#22c55e', error: '#e07b54', info: 'var(--navy)' };
+  const toast = document.createElement('div');
+  toast.textContent = msg;
+  toast.style.cssText = `position:fixed;bottom:24px;right:24px;z-index:2000;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:500;color:#fff;background:${colors[type]||colors.info};box-shadow:0 4px 12px rgba(0,0,0,0.15);opacity:0;transition:opacity 0.2s;`;
+  document.body.appendChild(toast);
+  requestAnimationFrame(() => { toast.style.opacity = '1'; });
+  setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 3500);
 }
 
 

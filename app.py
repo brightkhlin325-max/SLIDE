@@ -95,6 +95,20 @@ class OptimizeRequest(BaseModel):
     delay_penalty: float = 250.0
 
 
+class FlagEventRequest(BaseModel):
+    month: str
+    event_type: str
+    note: str = ""
+
+
+class RetrainRequest(BaseModel):
+    excluded_features: list = []
+
+
+class RetrainSessionRequest(BaseModel):
+    session_id: str
+
+
 def make_display_order_id(order_id: object) -> str:
     """Return a short manager-friendly display ID while preserving the hash in APIs."""
     if order_id is None:
@@ -135,34 +149,8 @@ def require_manager(role: str) -> None:
 
 
 # ── 登入驗證 ──────────────────────────────────────────────────────────────────
-import sys
-sys.path.insert(0, str(Path(__file__).parent / "core"))
 from auth import init_db, verify_user
 
-# 初始化資料庫
-init_db()
-
-class LoginRequest(BaseModel):
-    username: str
-    password: str
-
-@app.post("/api/login")
-async def login(request: LoginRequest):
-    result = verify_user(request.username, request.password)
-    if result["success"]:
-        return {"success": True, "role": result["role"]}
-    raise HTTPException(
-        status_code=401,
-        detail={"success": False, "message": "帳號或密碼錯誤"}
-    )
-
-
-# ── 登入驗證 ──────────────────────────────────────────────────────────────────
-import sys
-sys.path.insert(0, str(Path(__file__).parent / "core"))
-from auth import init_db, verify_user
-
-# 初始化資料庫
 init_db()
 
 class LoginRequest(BaseModel):
@@ -181,13 +169,12 @@ async def login(request: LoginRequest):
 
 @app.get("/")
 async def root():
-    """健康檢查 / 首頁跳轉。"""
-    return {
-        "system": "EDIS — DataCo 物流延遲預測與最佳化調度系統",
-        "version": "1.0.0",
-        "docs": "/docs",
-        "endpoints": ["/api/metrics", "/api/predict", "/api/executive-summary", "/api/scenario-analysis", "/api/optimize", "/api/upload"],
-    }
+    """回傳前端 Dashboard 首頁。"""
+    from fastapi.responses import FileResponse
+    index_path = BASE_DIR / "static" / "index.html"
+    if index_path.exists():
+        return FileResponse(str(index_path), media_type="text/html")
+    return {"system": "EDIS", "version": "1.0.0", "docs": "/docs"}
 
 
 @app.post("/api/upload")
@@ -807,6 +794,233 @@ async def get_region_risk():
     # 依延遲率降冪排序
     grouped = grouped.sort_values(by='p_late', ascending=False)
     return grouped.to_dict(orient="records")
+
+
+# ── 月份診斷端點 ──────────────────────────────────────────────────────────────
+
+@app.get("/api/chart/monthly")
+async def get_monthly_chart():
+    """回傳所有月份的預測延遲率與實際延遲率，供前端 Flipper 使用。"""
+    if not PREDICTIONS_PATH.exists():
+        raise HTTPException(status_code=404, detail="predictions.csv 不存在。")
+    df = pd.read_csv(PREDICTIONS_PATH)
+    if "order_date" not in df.columns or "p_late" not in df.columns:
+        raise HTTPException(status_code=500, detail="predictions.csv 缺少必要欄位。")
+
+    df["month"] = pd.to_datetime(df["order_date"], errors="coerce").dt.to_period("M").astype(str)
+    if "true_label" in df.columns:
+        df["actual_late"] = df["true_label"].astype(int)
+
+    grouped = df.groupby("month").agg(
+        avg_p_late=("p_late", "mean"),
+        actual_late_rate=("actual_late", "mean") if "actual_late" in df.columns else ("p_late", "mean"),
+        total_orders=("p_late", "count"),
+    ).reset_index().sort_values("month")
+
+    records = []
+    for _, row in grouped.iterrows():
+        records.append({
+            "month":            row["month"],
+            "avg_p_late":       round(float(row["avg_p_late"]), 4),
+            "actual_late_rate": round(float(row["actual_late_rate"]), 4),
+            "total_orders":     int(row["total_orders"]),
+        })
+    return {"data": records}
+
+
+@app.get("/api/diagnose/monthly")
+async def diagnose_monthly(month: str, error_threshold: float = 0.05):
+    """對指定月份跑 LIME 聚合分析，回傳誤差來源特徵。"""
+    if not PREDICTIONS_PATH.exists():
+        raise HTTPException(status_code=404, detail="predictions.csv 不存在。")
+
+    df = pd.read_csv(PREDICTIONS_PATH)
+    df["month"] = pd.to_datetime(df["order_date"], errors="coerce").dt.to_period("M").astype(str)
+    month_df = df[df["month"] == month].copy()
+    if month_df.empty:
+        raise HTTPException(status_code=404, detail=f"找不到 {month} 的資料。")
+
+    threshold_val = 0.5
+    if "true_label" in month_df.columns:
+        month_df["actual_late"]    = month_df["true_label"].astype(int)
+        month_df["predicted_late"] = (month_df["p_late"] >= threshold_val).astype(int)
+        month_df["is_correct"]     = month_df["actual_late"] == month_df["predicted_late"]
+    else:
+        month_df["is_correct"] = True
+
+    avg_p_late        = float(month_df["p_late"].mean())
+    actual_late_rate  = float(month_df["actual_late"].mean()) if "actual_late" in month_df.columns else avg_p_late
+    error             = abs(avg_p_late - actual_late_rate)
+    error_orders      = month_df[month_df["is_correct"] == False]
+
+    # LIME 聚合
+    top_factors = []
+    try:
+        import sys as _sys
+        _sys.path.insert(0, str(BASE_DIR / "core"))
+        from explainer import ManagerExplainer
+        metrics_data = {}
+        if METRICS_PATH.exists():
+            with open(METRICS_PATH, "r", encoding="utf-8") as f:
+                metrics_data = json.load(f)
+
+        sample = error_orders.head(20)
+        explainer = ManagerExplainer(sample, metrics_data)
+        factor_counts: dict = {}
+        factor_dirs: dict = {}
+        for _, row in sample.iterrows():
+            explanation = explainer.explain_order(row.to_dict())
+            for factor in explanation.get("top_x_factors", []):
+                feat = factor.get("feature", "")
+                dirn = factor.get("impact", "neutral")
+                factor_counts[feat] = factor_counts.get(feat, 0) + 1
+                factor_dirs.setdefault(feat, dirn)
+
+        max_count = max(factor_counts.values(), default=1)
+        top_factors = [
+            {
+                "feature":   feat,
+                "count":     cnt,
+                "direction": factor_dirs.get(feat, "neutral"),
+                "pct":       round(cnt / max_count * 100, 1),
+            }
+            for feat, cnt in sorted(factor_counts.items(), key=lambda x: -x[1])[:5]
+        ]
+    except Exception:
+        pass
+
+    # 讀取已有的外部事件標記
+    flags_path = DATA_DIR / "event_flags.json"
+    event_flag = None
+    if flags_path.exists():
+        with open(flags_path, "r", encoding="utf-8") as f:
+            flags = json.load(f)
+        event_flag = flags.get(month)
+
+    return {
+        "month":                 month,
+        "avg_p_late":            round(avg_p_late, 4),
+        "actual_late_rate":      round(actual_late_rate, 4),
+        "error":                 round(error, 4),
+        "error_exceeds_threshold": error > error_threshold,
+        "total_orders":          len(month_df),
+        "error_orders_count":    len(error_orders),
+        "top_factors":           top_factors,
+        "event_flag":            event_flag,
+    }
+
+
+@app.post("/api/diagnose/monthly/flag")
+async def flag_monthly_event(
+    body: FlagEventRequest,
+    x_role: Optional[str] = Header(default=None),
+):
+    """[Manager 限定] 將某月份標記為外部偶發事件。"""
+    role = get_role(x_role)
+    require_manager(role)
+
+    month      = body.month.strip()
+    event_type = body.event_type.strip()
+    note       = body.note.strip()
+
+    if not month or not event_type:
+        raise HTTPException(status_code=400, detail="month 與 event_type 為必填。")
+
+    flags_path = DATA_DIR / "event_flags.json"
+    flags: dict = {}
+    if flags_path.exists():
+        with open(flags_path, "r", encoding="utf-8") as f:
+            flags = json.load(f)
+
+    from datetime import datetime
+    flags[month] = {
+        "type":       event_type,
+        "note":       note,
+        "flagged_at": datetime.utcnow().isoformat(),
+        "flagged_by": role,
+    }
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with open(flags_path, "w", encoding="utf-8") as f:
+        json.dump(flags, f, ensure_ascii=False, indent=2)
+
+    return {"success": True, "month": month, "event_type": event_type, "note": note}
+
+
+# ── 模型重訓端點 ───────────────────────────────────────────────────────────────
+
+@app.post("/api/retrain")
+async def retrain_model(
+    body: RetrainRequest,
+    x_role: Optional[str] = Header(default=None),
+):
+    """
+    [Manager 限定] 排除指定特徵後重新訓練 XGBoost，回傳新舊模型指標比對。
+    新模型存入 temp 目錄，尚未替換現有模型。
+    """
+    role = get_role(x_role)
+    require_manager(role)
+
+    try:
+        from retrainer import ModelRetrainer
+    except ImportError:
+        raise HTTPException(status_code=500, detail="retrainer.py 載入失敗。")
+
+    retrainer = ModelRetrainer(base_dir=BASE_DIR)
+    try:
+        result = retrainer.run(excluded_features=body.excluded_features)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"重訓失敗：{str(e)}")
+
+    return {
+        "session_id":      result["session_id"],
+        "old_metrics":     result["old_metrics"],
+        "new_metrics":     result["new_metrics"],
+        "dropped_columns": result["dropped_columns"],
+    }
+
+
+@app.post("/api/retrain/adopt")
+async def adopt_retrain(
+    body: RetrainSessionRequest,
+    x_role: Optional[str] = Header(default=None),
+):
+    """[Manager 限定] 採用新模型，覆蓋現有 xgboost_model.json 與 model_metrics.json。"""
+    role = get_role(x_role)
+    require_manager(role)
+
+    try:
+        from retrainer import ModelRetrainer
+    except ImportError:
+        raise HTTPException(status_code=500, detail="retrainer.py 載入失敗。")
+
+    retrainer = ModelRetrainer(base_dir=BASE_DIR)
+    try:
+        retrainer.adopt(body.session_id)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    return {"success": True, "message": "新模型已採用並替換現有模型。"}
+
+
+@app.post("/api/retrain/discard")
+async def discard_retrain(
+    body: RetrainSessionRequest,
+    x_role: Optional[str] = Header(default=None),
+):
+    """[Manager 限定] 捨棄新模型，保留現有模型不變。"""
+    role = get_role(x_role)
+    require_manager(role)
+
+    try:
+        from retrainer import ModelRetrainer
+    except ImportError:
+        raise HTTPException(status_code=500, detail="retrainer.py 載入失敗。")
+
+    retrainer = ModelRetrainer(base_dir=BASE_DIR)
+    retrainer.discard(body.session_id)
+    return {"success": True, "message": "已捨棄新模型，現有模型不變。"}
 
 
 # ── 全域錯誤處理 ──────────────────────────────────────────────────────────────
