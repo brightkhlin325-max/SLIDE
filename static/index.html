@@ -197,6 +197,74 @@ body {
 .badge-viewer  { background: #f0f2f4; color: var(--muted); }
 .badge-manager { background: rgba(67,112,150,0.12); color: var(--navy); }
 
+.exec-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.exec-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.exec-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.exec-value {
+  margin-top: 7px;
+  font-size: 22px;
+  line-height: 1.1;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.exec-note {
+  margin-top: 7px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.exec-action {
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--navy);
+  border-radius: 8px;
+  background: #f7fafb;
+}
+
+.exec-action-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.exec-action-body {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+@media (max-width: 1100px) {
+  .exec-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 700px) {
+  .exec-grid { grid-template-columns: 1fr; }
+}
+
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -660,6 +728,34 @@ body {
             <div class="kpi-change" id="kpiExpectedDesc">載入中...</div>
           </div>
         </div>
+      </div>
+
+      <div class="exec-grid fade-in">
+        <div class="exec-card">
+          <div class="exec-label">SLA Risk</div>
+          <div class="exec-value" id="execSlaRisk">—</div>
+          <div class="exec-note" id="execSlaRiskNote">載入中...</div>
+        </div>
+        <div class="exec-card">
+          <div class="exec-label">Penalty Exposure</div>
+          <div class="exec-value" id="execExposure">—</div>
+          <div class="exec-note" id="execExposureNote">高風險訂單預估罰金</div>
+        </div>
+        <div class="exec-card">
+          <div class="exec-label">Budget Ask</div>
+          <div class="exec-value" id="execBudget">—</div>
+          <div class="exec-note" id="execBudgetNote">ROI 為正訂單的建議升級預算</div>
+        </div>
+        <div class="exec-card">
+          <div class="exec-label">Primary Driver</div>
+          <div class="exec-value" id="execDriver">—</div>
+          <div class="exec-note" id="execDriverNote">主要風險來源</div>
+        </div>
+      </div>
+
+      <div class="exec-action fade-in">
+        <div class="exec-action-title">高階經理人建議動作</div>
+        <div class="exec-action-body" id="execActionText">等待資料載入。</div>
       </div>
 
       <!-- Two-col -->
@@ -1170,6 +1266,11 @@ async function fetchRegions() {
   return cachedRegions;
 }
 
+async function fetchExecutiveSummary() {
+  return fetch(`${API_BASE}/api/executive-summary?threshold=${threshold}`)
+    .then(r => r.json());
+}
+
 async function fetchPredictions(page = 1, search = '', risk = '', shipping = '', region = '') {
   let url = `${API_BASE}/api/predict?page=${page}&limit=${limit}&threshold=${threshold}`;
   if (search) url += `&search=${encodeURIComponent(search)}`;
@@ -1303,6 +1404,37 @@ function renderMetrics(d) {
   const expectedLoss = totalPredictionsCount * d.late_rate * 250.0; 
   document.getElementById('kpiExpectedPenaltyLoss').textContent = '$' + Math.round(expectedLoss).toLocaleString();
   document.getElementById('kpiExpectedDesc').textContent = `平均延遲率 ${(d.late_rate * 100).toFixed(1)}%`;
+}
+
+function renderExecutiveSummary(d) {
+  const serviceLevel = ((d.estimated_service_level || 0) * 100).toFixed(1);
+  const atRiskRate = ((d.at_risk_rate || 0) * 100).toFixed(1);
+  const topRegion = (d.top_regions && d.top_regions[0]) ? d.top_regions[0] : null;
+  const topMode = (d.top_shipping_modes && d.top_shipping_modes[0]) ? d.top_shipping_modes[0] : null;
+
+  document.getElementById('execSlaRisk').textContent = `${serviceLevel}%`;
+  document.getElementById('execSlaRiskNote').textContent =
+    `目標 90%，目前 ${d.at_risk_orders.toLocaleString()} 筆訂單高於風險門檻。`;
+
+  document.getElementById('execExposure').textContent =
+    '$' + Math.round(d.expected_penalty_exposure || 0).toLocaleString();
+  document.getElementById('execExposureNote').textContent =
+    `約 ${atRiskRate}% 訂單可能影響準時交付。`;
+
+  document.getElementById('execBudget').textContent =
+    '$' + Math.round(d.recommended_budget || 0).toLocaleString();
+  document.getElementById('execBudgetNote').textContent =
+    `${d.positive_roi_orders.toLocaleString()} 筆高風險訂單升級後仍有正淨效益。`;
+
+  document.getElementById('execDriver').textContent =
+    topRegion ? topRegion.label : (topMode ? topMode.label : '—');
+  document.getElementById('execDriverNote').textContent =
+    topRegion && topMode
+      ? `${topRegion.label} 與 ${topMode.label} 是目前最需要管理的風險來源。`
+      : '目前沒有明顯集中的區域或運送模式風險。';
+
+  document.getElementById('execActionText').textContent =
+    `${d.recommended_action} ${d.data_quality_note || ''}`;
 }
 
 function fillClass(p) {
@@ -1806,7 +1938,10 @@ function closeExplainModal() {
 // ══ Dashboard Refresh Helper ══
 async function refreshDashboard() {
   try {
-    const p = await fetchPredictions(currentPage);
+    const [p, executive] = await Promise.all([
+      fetchPredictions(currentPage),
+      fetchExecutiveSummary()
+    ]);
     if (p) {
       totalPredictionsCount = p.count || 0;
       renderBossTable(p.data || []);
@@ -1814,6 +1949,7 @@ async function refreshDashboard() {
       const m = await fetchMetrics();
       if (m) renderMetrics(m);
     }
+    if (executive) renderExecutiveSummary(executive);
   } catch (e) {
     console.error('Failed to refresh dashboard', e);
   }

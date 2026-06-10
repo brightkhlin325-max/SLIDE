@@ -303,6 +303,100 @@ async def get_summary(by: str = "shipping_mode"):
     return grouped.rename(columns={by: "label"}).to_dict(orient="records")
 
 
+@app.get("/api/executive-summary")
+async def get_executive_summary(
+    threshold: float = 0.5,
+    upgrade_cost: float = 80.0,
+    delay_penalty: float = 250.0,
+):
+    """
+    [公開] 高階經理人決策摘要。
+
+    將模型預測轉成營運語言：服務水準風險、財務曝險、建議預算、
+    以及優先處理的區域與運送模式。
+    """
+    if not PREDICTIONS_PATH.exists():
+        total_orders = 2
+        at_risk_orders = 1
+        expected_penalty_exposure = 205.0
+        positive_roi_orders = 1
+        return {
+            "total_orders": total_orders,
+            "at_risk_orders": at_risk_orders,
+            "at_risk_rate": 0.5,
+            "service_level_target": 0.9,
+            "estimated_service_level": 0.5,
+            "expected_penalty_exposure": expected_penalty_exposure,
+            "positive_roi_orders": positive_roi_orders,
+            "recommended_budget": 80.0,
+            "recommended_action": "先升級高風險且 ROI 為正的訂單，避免延遲罰金擴大。",
+            "top_regions": [{"label": "Western Europe", "count": 1, "avg_p_late": 0.82}],
+            "top_shipping_modes": [{"label": "Standard Class", "count": 1, "avg_p_late": 0.82}],
+            "data_quality_note": "示範資料，請先產生 predictions.csv。",
+        }
+
+    df = pd.read_csv(PREDICTIONS_PATH)
+    if df.empty or "p_late" not in df.columns:
+        raise HTTPException(status_code=500, detail="predictions.csv 缺少 p_late 或資料為空。")
+
+    working = df.copy()
+    working["p_late"] = pd.to_numeric(working["p_late"], errors="coerce").fillna(0.0)
+    if "expected_penalty" not in working.columns:
+        working["expected_penalty"] = (working["p_late"] * delay_penalty).round(2)
+    if "upgrade_cost" not in working.columns:
+        working["upgrade_cost"] = upgrade_cost
+
+    total_orders = int(len(working))
+    at_risk = working[working["p_late"] >= threshold].copy()
+    at_risk_orders = int(len(at_risk))
+    at_risk_rate = (at_risk_orders / total_orders) if total_orders else 0.0
+    estimated_service_level = 1.0 - at_risk_rate
+    exposure = float(at_risk["expected_penalty"].sum()) if not at_risk.empty else 0.0
+
+    at_risk["net_benefit"] = (
+        pd.to_numeric(at_risk["expected_penalty"], errors="coerce").fillna(0.0)
+        - pd.to_numeric(at_risk["upgrade_cost"], errors="coerce").fillna(upgrade_cost)
+    )
+    positive_roi = at_risk[at_risk["net_benefit"] > 0]
+    positive_roi_orders = int(len(positive_roi))
+    recommended_budget = float(positive_roi["upgrade_cost"].sum()) if not positive_roi.empty else 0.0
+
+    def top_breakdown(column: str) -> list[dict]:
+        if column not in at_risk.columns or at_risk.empty:
+            return []
+        grouped = (
+            at_risk.groupby(column)
+            .agg(count=("p_late", "count"), avg_p_late=("p_late", "mean"))
+            .reset_index()
+            .sort_values(["count", "avg_p_late"], ascending=False)
+            .head(5)
+        )
+        grouped["avg_p_late"] = grouped["avg_p_late"].round(4)
+        return grouped.rename(columns={column: "label"}).to_dict(orient="records")
+
+    if at_risk_rate >= 0.35:
+        action = "立即啟動升級調度；高風險訂單比例偏高，需優先保護 SLA 與客戶承諾。"
+    elif positive_roi_orders > 0:
+        action = "選擇性升級 ROI 為正的高風險訂單，並每日追蹤區域與運送模式異常。"
+    else:
+        action = "維持原配送策略，將高風險訂單列入監控清單。"
+
+    return {
+        "total_orders": total_orders,
+        "at_risk_orders": at_risk_orders,
+        "at_risk_rate": round(at_risk_rate, 4),
+        "service_level_target": 0.9,
+        "estimated_service_level": round(estimated_service_level, 4),
+        "expected_penalty_exposure": round(exposure, 2),
+        "positive_roi_orders": positive_roi_orders,
+        "recommended_budget": round(recommended_budget, 2),
+        "recommended_action": action,
+        "top_regions": top_breakdown("order_region"),
+        "top_shipping_modes": top_breakdown("shipping_mode"),
+        "data_quality_note": "以目前 predictions.csv 計算；實務上應每日更新並與真實到貨結果回寫比對。",
+    }
+
+
 @app.post("/api/optimize")
 async def run_optimization(
     request: OptimizeRequest,
