@@ -122,6 +122,52 @@ def require_manager(role: str) -> None:
 
 # ── 路由 ──────────────────────────────────────────────────────────────────────
 
+
+# ── 登入驗證 ──────────────────────────────────────────────────────────────────
+import sys
+sys.path.insert(0, str(Path(__file__).parent / "core"))
+from auth import init_db, verify_user
+
+# 初始化資料庫
+init_db()
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+@app.post("/api/login")
+async def login(request: LoginRequest):
+    result = verify_user(request.username, request.password)
+    if result["success"]:
+        return {"success": True, "role": result["role"]}
+    raise HTTPException(
+        status_code=401,
+        detail={"success": False, "message": "帳號或密碼錯誤"}
+    )
+
+
+# ── 登入驗證 ──────────────────────────────────────────────────────────────────
+import sys
+sys.path.insert(0, str(Path(__file__).parent / "core"))
+from auth import init_db, verify_user
+
+# 初始化資料庫
+init_db()
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+@app.post("/api/login")
+async def login(request: LoginRequest):
+    result = verify_user(request.username, request.password)
+    if result["success"]:
+        return {"success": True, "role": result["role"]}
+    raise HTTPException(
+        status_code=401,
+        detail={"success": False, "message": "帳號或密碼錯誤"}
+    )
+
 @app.get("/")
 async def root():
     """健康檢查 / 首頁跳轉。"""
