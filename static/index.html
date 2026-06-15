@@ -1032,8 +1032,8 @@ body {
       <!-- Filter controls -->
       <div class="panel fade-in" style="margin-bottom: 16px; padding: 16px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; background: var(--card);">
         <div style="flex: 1; min-width: 200px;">
-          <label class="field-label">搜尋訂單 ID (Hash)</label>
-          <input type="text" id="riskSearchInput" oninput="applyFilters()" placeholder="輸入關鍵字搜尋..." style="width:100%; padding:8px 12px; border:1px solid var(--border); border-radius:6px; font-size:12px; outline:none; background:var(--bg); color:var(--text);">
+          <label class="field-label">搜尋訂單 ID</label>
+          <input type="text" id="riskSearchInput" oninput="applyFilters()" placeholder="輸入訂單 ID 或片段（例：ORD-BFD69941 或 bfd69941）" style="width:100%; padding:8px 12px; border:1px solid var(--border); border-radius:6px; font-size:12px; outline:none; background:var(--bg); color:var(--text);">
         </div>
         <div>
           <label class="field-label">風險等級</label>
@@ -1681,7 +1681,7 @@ async function fetchPredictions(page = 1, search = '', risk = '', shipping = '',
 
 function displayOrderId(orderId) {
   const raw = String(orderId || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-  return raw ? `ORD-${raw.slice(0, 6)}` : 'ORD-UNKNOWN';
+  return raw ? `ORD-${raw.slice(0, 8)}` : 'ORD-UNKNOWN';
 }
 
 async function fetchOptimize(budget, upgradeCost, delayPenalty) {
