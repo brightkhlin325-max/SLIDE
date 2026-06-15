@@ -59,6 +59,27 @@ DATA_DIR = BASE_DIR / "data" / "processed"
 METRICS_PATH = DATA_DIR / "model_metrics.json"
 PREDICTIONS_PATH = DATA_DIR / "predictions.csv"
 
+# DataFrame 快取機制
+PREDICTIONS_CACHE = {}
+
+def load_cached_predictions(path: Path) -> pd.DataFrame:
+    """載入並快取 CSV 預測資料，避免每次請求都重複讀取與解析。"""
+    if not path.exists():
+        raise FileNotFoundError(f"檔案不存在: {path}")
+    
+    mtime = path.stat().st_mtime
+    cache_entry = PREDICTIONS_CACHE.get(path)
+    
+    if cache_entry is None or cache_entry["mtime"] != mtime:
+        df = pd.read_csv(path)
+        PREDICTIONS_CACHE[path] = {
+            "mtime": mtime,
+            "df": df
+        }
+        return df.copy()
+        
+    return cache_entry["df"].copy()
+
 # RBAC 角色定義
 ROLE_VIEWER = "Viewer"
 ROLE_MANAGER = "Logistics_Manager"
@@ -87,9 +108,33 @@ if static_dir.exists():
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 
+def init_db():
+    """初始化 SQLite 審計日誌資料表。"""
+    try:
+        import sqlite3
+        from auth import DB_PATH
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS audit_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                operator TEXT NOT NULL,
+                action TEXT NOT NULL,
+                detail TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        conn.commit()
+        conn.close()
+        print("[DB] 審計日誌資料表已初始化。")
+    except Exception as e:
+        print(f"[DB] 審計日誌資料表初始化失敗: {str(e)}")
+
+
 @app.on_event("startup")
 async def startup_event():
     """啟動背景磁碟清理任務，每小時清理過期 24 小時的暫存檔"""
+    init_db()
     import asyncio
     async def cleanup_loop():
         while True:
@@ -565,7 +610,7 @@ async def get_threshold_tuning(
 
 
 @app.get("/api/predict")
-async def get_predictions(
+def get_predictions(
     x_role: Optional[str] = Header(default=None),
     authorization: Optional[str] = Header(default=None),
     x_session_id: Optional[str] = Header(default=None),
@@ -623,7 +668,7 @@ async def get_predictions(
             "note": "示範資料（請先執行 model_pipeline.py）",
         }
 
-    df = pd.read_csv(pred_path)
+    df = load_cached_predictions(pred_path)
 
 
     # 動態計算 predicted_late、actual_late 和 is_correct
@@ -711,7 +756,7 @@ async def get_predictions(
 
 
 @app.get("/api/summary")
-async def get_summary(
+def get_summary(
     by: str = "shipping_mode",
     x_session_id: Optional[str] = Header(default=None)
 ):
@@ -725,7 +770,7 @@ async def get_summary(
     if not pred_path.exists():
         return []
 
-    df = pd.read_csv(pred_path)
+    df = load_cached_predictions(pred_path)
 
     grouped = (
         df.groupby(by)
@@ -738,7 +783,7 @@ async def get_summary(
 
 
 @app.get("/api/executive-summary")
-async def get_executive_summary(
+def get_executive_summary(
     threshold: float = 0.5,
     upgrade_cost: float = 80.0,
     delay_penalty: float = 250.0,
@@ -772,7 +817,7 @@ async def get_executive_summary(
             "data_quality_note": "示範資料，請先產生 predictions.csv。",
         }
 
-    df = pd.read_csv(pred_path)
+    df = load_cached_predictions(pred_path)
 
     if df.empty or "p_late" not in df.columns:
         raise HTTPException(status_code=500, detail="predictions.csv 缺少 p_late 或資料為空。")
@@ -836,7 +881,7 @@ async def get_executive_summary(
 
 
 @app.get("/api/scenario-analysis")
-async def get_scenario_analysis(
+def get_scenario_analysis(
     budgets: str = "1000,3000,5000,10000",
     upgrade_cost: float = 80.0,
     delay_penalty: float = 250.0,
@@ -882,6 +927,7 @@ async def get_scenario_analysis(
     if not parsed_budgets:
         raise HTTPException(status_code=400, detail="budgets 至少需包含一個正數，例如 1000,3000,5000。")
 
+    df = load_cached_predictions(pred_path)
     scenarios = []
     for budget in parsed_budgets:
         optimizer = ShippingOptimizer(
@@ -891,8 +937,9 @@ async def get_scenario_analysis(
             max_candidates=500,
         )
         result = optimizer.run(
-            predictions_path=str(pred_path),
+            predictions_path_or_df=df,
             output_dir=str(DATA_DIR),
+            save_results=False,
         ).to_dict()
 
         scenarios.append({
@@ -921,7 +968,7 @@ async def get_scenario_analysis(
 
 
 @app.post("/api/optimize")
-async def run_optimization(
+def run_optimization(
     request: OptimizeRequest,
     x_role: Optional[str] = Header(default=None),
     authorization: Optional[str] = Header(default=None),
@@ -972,8 +1019,9 @@ async def run_optimization(
         risk_threshold=request.risk_threshold,
     )
     result = optimizer.run(
-        predictions_path=str(pred_path),
+        predictions_path_or_df=str(pred_path),
         output_dir=str(DATA_DIR),
+        save_results=True,
     )
 
 
@@ -982,7 +1030,7 @@ async def run_optimization(
     # 執行 ManagerExplainer 產出對應的管理報告以通過系統合約驗證與提供前端數據
     try:
         from explainer import ManagerExplainer
-        df = pd.read_csv(pred_path)
+        df = load_cached_predictions(pred_path)
         metrics = {}
         if METRICS_PATH.exists():
             with open(METRICS_PATH, "r", encoding="utf-8") as f:
@@ -1004,7 +1052,7 @@ async def run_optimization(
 
 
 @app.get("/api/explain/{order_id_hash}")
-async def get_order_explanation(
+def get_order_explanation(
     order_id_hash: str,
     x_role: Optional[str] = Header(default=None),
     authorization: Optional[str] = Header(default=None),
@@ -1019,7 +1067,7 @@ async def get_order_explanation(
     if not pred_path.exists():
         raise HTTPException(status_code=404, detail="預測資料不存在，請先執行 pipeline。")
 
-    df = pd.read_csv(pred_path)
+    df = load_cached_predictions(pred_path)
 
     rows = df[df["order_id_hash"].astype(str) == order_id_hash]
     if rows.empty:
@@ -1047,7 +1095,7 @@ async def get_order_explanation(
 
 
 @app.get("/api/regions")
-async def get_region_risk(
+def get_region_risk(
     x_session_id: Optional[str] = Header(default=None)
 ):
     """計算並回傳各區域的平均延遲率排行。"""
@@ -1057,7 +1105,7 @@ async def get_region_risk(
             {"order_region": "Western Europe", "p_late": 0.82, "count": 2},
             {"order_region": "Central America", "p_late": 0.45, "count": 1},
         ]
-    df = pd.read_csv(pred_path)
+    df = load_cached_predictions(pred_path)
 
     if 'order_region' not in df.columns:
         return []
@@ -1077,14 +1125,14 @@ async def get_region_risk(
 # ── 月份診斷端點 ──────────────────────────────────────────────────────────────
 
 @app.get("/api/chart/monthly")
-async def get_monthly_chart(
+def get_monthly_chart(
     x_session_id: Optional[str] = Header(default=None)
 ):
     """回傳所有月份的預測延遲率與實際延遲率，供前端 Flipper 使用。"""
     pred_path = get_predictions_path(x_session_id)
     if not pred_path.exists():
         raise HTTPException(status_code=404, detail="predictions.csv 不存在。")
-    df = pd.read_csv(pred_path)
+    df = load_cached_predictions(pred_path)
 
     if "order_date" not in df.columns or "p_late" not in df.columns:
         raise HTTPException(status_code=500, detail="predictions.csv 缺少必要欄位。")
@@ -1111,7 +1159,7 @@ async def get_monthly_chart(
 
 
 @app.get("/api/diagnose/monthly")
-async def diagnose_monthly(
+def diagnose_monthly(
     month: str,
     error_threshold: float = 0.05,
     x_session_id: Optional[str] = Header(default=None)
@@ -1121,7 +1169,7 @@ async def diagnose_monthly(
     if not pred_path.exists():
         raise HTTPException(status_code=404, detail="predictions.csv 不存在。")
 
-    df = pd.read_csv(pred_path)
+    df = load_cached_predictions(pred_path)
 
     df["month"] = pd.to_datetime(df["order_date"], errors="coerce").dt.to_period("M").astype(str)
     month_df = df[df["month"] == month].copy()
@@ -1199,7 +1247,7 @@ async def diagnose_monthly(
 
 
 @app.post("/api/diagnose/monthly/flag")
-async def flag_monthly_event(
+def flag_monthly_event(
     body: FlagEventRequest,
     x_role: Optional[str] = Header(default=None),
     authorization: Optional[str] = Header(default=None),
@@ -1267,7 +1315,7 @@ async def retrain_model(
 
 
 @app.get("/api/tasks/{task_id}/status")
-async def get_task_status(task_id: str):
+def get_task_status(task_id: str):
     """查詢模型重訓背景任務的最新狀態與訓練進度。"""
     if task_id not in RETRAIN_TASKS:
         raise HTTPException(status_code=404, detail="找不到指定的任務。")
@@ -1275,7 +1323,7 @@ async def get_task_status(task_id: str):
 
 
 @app.post("/api/retrain/adopt")
-async def adopt_retrain(
+def adopt_retrain(
     body: RetrainSessionRequest,
     x_role: Optional[str] = Header(default=None),
     authorization: Optional[str] = Header(default=None),
@@ -1316,15 +1364,6 @@ async def adopt_retrain(
             from auth import DB_PATH
             conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()
-            c.execute('''
-                CREATE TABLE IF NOT EXISTS audit_logs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    operator TEXT NOT NULL,
-                    action TEXT NOT NULL,
-                    detail TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
             
             # 從 Token 解析用戶名
             username = "admin"
@@ -1364,7 +1403,7 @@ async def adopt_retrain(
 
 
 @app.post("/api/retrain/discard")
-async def discard_retrain(
+def discard_retrain(
     body: RetrainSessionRequest,
     x_role: Optional[str] = Header(default=None),
     authorization: Optional[str] = Header(default=None),

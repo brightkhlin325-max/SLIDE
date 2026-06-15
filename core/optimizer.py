@@ -110,32 +110,39 @@ class ShippingOptimizer:
 
     def run(
         self,
-        predictions_path: str,
+        predictions_path_or_df: str | pd.DataFrame,
         output_dir: str = "data/processed",
+        save_results: bool = True,
     ) -> OptimizationResult:
         """
         完整最佳化流程：載入預測 → 求解 → 輸出
 
         Parameters
         ----------
-        predictions_path : str
-            model_pipeline.py 輸出的 predictions.csv 路徑
+        predictions_path_or_df : str | pd.DataFrame
+            predictions.csv 路徑，或是已載入的 pd.DataFrame
         output_dir : str
             結果輸出目錄
+        save_results : bool
+            是否將結果儲存到磁碟（若為 False，則不進行磁碟寫入）
 
         Returns
         -------
         OptimizationResult
         """
-        os.makedirs(output_dir, exist_ok=True)
+        if save_results:
+            os.makedirs(output_dir, exist_ok=True)
 
         print("=" * 60)
         print("EDIS ShippingOptimizer — 開始執行")
         print(f"  預算：USD ${self.budget:,.0f}")
         print("=" * 60)
 
-        # 載入預測資料
-        df = self._load_predictions(predictions_path)
+        # 載入與補全預測資料
+        if isinstance(predictions_path_or_df, str):
+            df = self._load_predictions(predictions_path_or_df)
+        else:
+            df = self._complete_fields(predictions_path_or_df.copy())
 
         # 篩選候選訂單
         candidates = self._filter_candidates(df)
@@ -144,7 +151,8 @@ class ShippingOptimizer:
         result = self.optimize(candidates)
 
         # 儲存結果
-        self._save_results(result, output_dir)
+        if save_results:
+            self._save_results(result, output_dir)
 
         print(f"\n[Done] 最佳化完成：選出 {result.selected_count} 筆訂單升級")
         print(f"  總升級成本：USD ${result.total_cost:,.0f}（預算：USD ${self.budget:,.0f}）")
@@ -193,11 +201,14 @@ class ShippingOptimizer:
     # ── 私有方法 ───────────────────────────────────────────────────────────
 
     def _load_predictions(self, path: str) -> pd.DataFrame:
-        """載入 predictions.csv 並補上缺失欄位的預設值。"""
+        """載入 predictions.csv。"""
         print(f"\n[Step 1] 載入預測結果：{path}")
         df = pd.read_csv(path)
         print(f"  共 {len(df):,} 筆預測")
+        return self._complete_fields(df)
 
+    def _complete_fields(self, df: pd.DataFrame) -> pd.DataFrame:
+        """補全缺失欄位的預設值。"""
         # 1. 補全 expected_penalty：每次用當前 delay_penalty 覆寫以確保與最新參數對齊
         df["expected_penalty"] = df["p_late"] * self.delay_penalty
         
