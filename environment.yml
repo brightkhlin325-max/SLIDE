@@ -23,3 +23,5 @@ dependencies:
     - python-multipart>=0.0.9
     # 密碼雜湊（auth.py 登入驗證，bcrypt 4.0 為 Rust 重寫版下限）
     - bcrypt>=4.0
+    # GeoJSON 代理端點 (/api/geojson/countries) 必要依賴
+    - httpx>=0.24

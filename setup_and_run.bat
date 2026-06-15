@@ -11,8 +11,9 @@ echo ==========================================
 echo EDIS Setup and Run Script
 echo ==========================================
 echo [INFO] Project: %CD%
+echo [INFO] Conda environment: %ENV_NAME%
 
-:: 1. Locate Conda. Using `conda run` also supports custom environment paths.
+:: 1. Locate Conda. `conda run -n NAME` works regardless of where the env lives.
 set "CONDA_CMD="
 where conda.exe >nul 2>nul
 if %errorlevel% equ 0 set "CONDA_CMD=conda.exe"
@@ -28,102 +29,51 @@ if not defined CONDA_CMD (
     exit /b 1
 )
 
-:: 2. Create the environment when missing; otherwise synchronize dependencies.
+:: 2. Create the environment when missing; otherwise update it from environment.yml.
 echo [INFO] Checking Conda environment "%ENV_NAME%"...
 call "%CONDA_CMD%" run -n "%ENV_NAME%" python --version >nul 2>nul
 if errorlevel 1 (
-    echo [INFO] Creating environment from environment.yml. This may take a few minutes...
+    echo [INFO] Creating environment "%ENV_NAME%" from environment.yml. This may take a few minutes...
     call "%CONDA_CMD%" env create -f environment.yml
     if errorlevel 1 goto environment_error
 ) else (
-    echo [INFO] Updating environment from environment.yml...
+    echo [INFO] Updating environment "%ENV_NAME%" from environment.yml...
     call "%CONDA_CMD%" env update -n "%ENV_NAME%" -f environment.yml
     if errorlevel 1 goto environment_error
 )
 
-:: 2. Resolve target environment python path first
-set "ENV_PYTHON="
-if exist "D:\anaconda_envs\edis_env\python.exe" set "ENV_PYTHON=D:\anaconda_envs\edis_env\python.exe"
-if not defined ENV_PYTHON if exist "%USERPROFILE%\anaconda3\envs\edis_env\python.exe" set "ENV_PYTHON=%USERPROFILE%\anaconda3\envs\edis_env\python.exe"
-if not defined ENV_PYTHON if exist "C:\ProgramData\anaconda3\envs\edis_env\python.exe" set "ENV_PYTHON=C:\ProgramData\anaconda3\envs\edis_env\python.exe"
-if not defined ENV_PYTHON if exist "%USERPROFILE%\miniconda3\envs\edis_env\python.exe" set "ENV_PYTHON=%USERPROFILE%\miniconda3\envs\edis_env\python.exe"
-if not defined ENV_PYTHON if exist "C:\ProgramData\miniconda3\envs\edis_env\python.exe" set "ENV_PYTHON=C:\ProgramData\miniconda3\envs\edis_env\python.exe"
+:: 2b. Guarantee pip dependencies. `conda env update` does NOT reliably (re)install the
+::     pip section, so install them explicitly here (idempotent / no-op if already present).
+::     This prevents "import bcrypt/httpx fails -> app won't start / login fails".
+echo [INFO] Ensuring pip dependencies are installed...
+call "%CONDA_CMD%" run -n "%ENV_NAME%" python -m pip install -q "pulp>=2.7" "fastapi>=0.110" "uvicorn[standard]>=0.27" "pydantic>=2.0" "python-multipart>=0.0.9" "bcrypt>=4.0" "httpx>=0.24"
+if errorlevel 1 goto environment_error
 
-:: 3. Find Conda Path (Only needed if environment doesn't exist)
-if not defined ENV_PYTHON (
-    set "CONDA_EXE="
-    if exist "%USERPROFILE%\anaconda3\Scripts\conda.exe" set "CONDA_EXE=%USERPROFILE%\anaconda3\Scripts\conda.exe"
-    if not defined CONDA_EXE if exist "C:\ProgramData\anaconda3\Scripts\conda.exe" set "CONDA_EXE=C:\ProgramData\anaconda3\Scripts\conda.exe"
-    if not defined CONDA_EXE if exist "%USERPROFILE%\miniconda3\Scripts\conda.exe" set "CONDA_EXE=%USERPROFILE%\miniconda3\Scripts\conda.exe"
-    if not defined CONDA_EXE if exist "C:\ProgramData\miniconda3\Scripts\conda.exe" set "CONDA_EXE=C:\ProgramData\miniconda3\Scripts\conda.exe"
-    if not defined CONDA_EXE (
-        where conda.exe >nul 2>nul
-        if %errorlevel% equ 0 set "CONDA_EXE=conda.exe"
-    )
-    
-    if not defined CONDA_EXE (
-        if exist "%USERPROFILE%\anaconda3\condabin\conda.bat" set "CONDA_EXE=%USERPROFILE%\anaconda3\condabin\conda.bat"
-        if not defined CONDA_EXE if exist "C:\ProgramData\anaconda3\condabin\conda.bat" set "CONDA_EXE=C:\ProgramData\anaconda3\condabin\conda.bat"
-    )
-
-:: 4. Existing predictions and model files are enough to run the application.
-:: The raw Kaggle dataset is required only when these artifacts must be rebuilt.
-if exist "data\processed\predictions.csv" if exist "models\xgboost_model.json" goto model_outputs_ready
+:: 3. Committed predictions.csv + model are enough to run. Rebuild only if missing.
+if exist "data\processed\predictions.csv" if exist "models\xgboost_model.json" goto launch
 
 echo [INFO] Model outputs are missing. The training pipeline must run once.
+if not exist "data\raw\DataCoSupplyChainDataset.csv" if exist "data\raw\archive.zip" (
+    echo [INFO] Extracting data\raw\archive.zip...
+    powershell -NoProfile -Command "Expand-Archive -Path 'data\raw\archive.zip' -DestinationPath 'data\raw' -Force"
+)
 if not exist "data\raw\DataCoSupplyChainDataset.csv" (
-    if exist "data\raw\archive.zip" (
-        echo [INFO] Extracting data\raw\archive.zip...
-        powershell -NoProfile -Command "Expand-Archive -Path 'data\raw\archive.zip' -DestinationPath 'data\raw' -Force"
-        if errorlevel 1 (
-            echo [ERROR] Dataset extraction failed.
-            pause
-            exit /b 1
-        )
-    )
-)
-
-:: 4. Check and create Conda environment
-echo [INFO] Checking Conda environment...
-if defined ENV_PYTHON goto env_exists
-
-echo [INFO] Environment 'edis_env' not detected. Creating it now (this may take a few minutes)...
-"%CONDA_EXE%" env create -f environment.yml
-if %errorlevel% neq 0 (
-    echo [ERROR] Failed to create environment!
+    echo [ERROR] Missing model outputs AND raw dataset; cannot rebuild.
+    echo Restore data\processed\predictions.csv + models\xgboost_model.json,
+    echo or place DataCoSupplyChainDataset.csv into data\raw\ , then rerun.
     pause
     exit /b 1
 )
 
-:: Re-resolve ENV_PYTHON after creation
-if exist "D:\anaconda_envs\edis_env\python.exe" set "ENV_PYTHON=D:\anaconda_envs\edis_env\python.exe"
-if not defined ENV_PYTHON if exist "%USERPROFILE%\anaconda3\envs\edis_env\python.exe" set "ENV_PYTHON=%USERPROFILE%\anaconda3\envs\edis_env\python.exe"
-if not defined ENV_PYTHON if exist "C:\ProgramData\anaconda3\envs\edis_env\python.exe" set "ENV_PYTHON=C:\ProgramData\anaconda3\envs\edis_env\python.exe"
-if not defined ENV_PYTHON if exist "%USERPROFILE%\miniconda3\envs\edis_env\python.exe" set "ENV_PYTHON=%USERPROFILE%\miniconda3\envs\edis_env\python.exe"
-if not defined ENV_PYTHON if exist "C:\ProgramData\miniconda3\envs\edis_env\python.exe" set "ENV_PYTHON=C:\ProgramData\miniconda3\envs\edis_env\python.exe"
+echo [INFO] Rebuilding model outputs from raw data. This may take a few minutes...
+call "%CONDA_CMD%" run --no-capture-output -n "%ENV_NAME%" python core\data_pipeline.py
+if errorlevel 1 goto pipeline_error
+call "%CONDA_CMD%" run --no-capture-output -n "%ENV_NAME%" python core\model_pipeline.py
+if errorlevel 1 goto pipeline_error
+call "%CONDA_CMD%" run --no-capture-output -n "%ENV_NAME%" python core\build_mappings.py
 
-if not defined ENV_PYTHON (
-    echo [ERROR] Failed to locate Python in the created environment!
-    pause
-    exit /b 1
-)
-
-:env_exists
-echo [INFO] Conda environment 'edis_env' is ready.
-
-:: 5. Check pipeline outputs and run model training if needed
-if not exist "data\processed\predictions.csv" (
-    echo [INFO] predictions.csv not found. Running pipeline and training model...
-    goto run_training_pipeline
-)
-if not exist "data\processed\val_ready.csv" (
-    echo [INFO] val_ready.csv not found. Rebuilding train/validation/test outputs...
-    goto run_training_pipeline
-)
-
-:model_outputs_ready
-echo [INFO] Model and prediction files are ready.
-
+:launch
+:: Optional: threshold tuning report instead of launching the server.
 if /I "%~1"=="tune-threshold" (
     echo [INFO] Running threshold tuning report...
     call "%CONDA_CMD%" run --no-capture-output -n "%ENV_NAME%" python scripts\tune_threshold.py
@@ -137,7 +87,7 @@ if /I "%~1"=="tune-threshold" (
     exit /b 0
 )
 
-:: 5. Create the local authentication database and launch the app.
+:: Create/upgrade the local authentication database (admin/viewer, bcrypt).
 echo [INFO] Initializing authentication database...
 call "%CONDA_CMD%" run --no-capture-output -n "%ENV_NAME%" python core\auth.py
 if errorlevel 1 (
@@ -163,7 +113,12 @@ if errorlevel 1 (
 exit /b 0
 
 :environment_error
-echo [ERROR] Failed to create or update the Conda environment.
+echo [ERROR] Failed to create/update the Conda environment or install dependencies.
 echo Check your network connection and environment.yml, then try again.
+pause
+exit /b 1
+
+:pipeline_error
+echo [ERROR] Model training pipeline failed. See the messages above.
 pause
 exit /b 1
