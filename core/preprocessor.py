@@ -4,6 +4,56 @@ import json
 from pathlib import Path
 import hashlib
 
+
+# ── 上傳資料驗證閘門（C）─────────────────────────────────────────────
+class UploadValidationError(ValueError):
+    """上傳資料未通過 schema 驗證（非訂單資料 / 欄位重複等）。由 API 轉成 400。"""
+
+
+# 用來判斷「這是不是訂單資料」的已知欄位（一律小寫比對）
+KNOWN_ORDER_COLUMNS = {
+    "order id", "order id_hash", "order_id_hash",
+    "order date (dateorders)", "order date", "order_date",
+    "shipping mode", "order region", "order country", "category name",
+    "customer segment", "type", "department name", "market",
+    "days for shipment (scheduled)", "product price", "order item quantity",
+    "order item discount rate", "order item profit ratio", "order profit per order",
+    "late_delivery_risk",
+}
+MIN_KNOWN_COLUMNS = 3
+
+
+def validate_upload_columns(columns) -> dict:
+    """
+    驗證上傳檔欄位是否像「有效訂單資料」。不通過則 raise UploadValidationError。
+    請傳入『原始欄名列表』（含重複，未經 pandas 去重）以正確偵測重複欄。
+    """
+    raw = [str(c).strip() for c in columns]
+    lower = [c.lower() for c in raw]
+
+    # 1) 重複欄位（pandas 讀檔會靜默把第二個同名欄改名，故須在原始欄名上檢查）
+    seen, dups = set(), set()
+    for c in lower:
+        if c in seen:
+            dups.add(c)
+        seen.add(c)
+    if dups:
+        raise UploadValidationError(
+            f"偵測到重複欄位：{sorted(dups)}。請移除重複欄位後重新上傳。"
+        )
+
+    # 2) 是否像訂單資料（至少要對上 N 個已知欄位，否則視為非訂單資料）
+    matched = [c for c in lower if c in KNOWN_ORDER_COLUMNS]
+    if len(matched) < MIN_KNOWN_COLUMNS:
+        raise UploadValidationError(
+            f"這份檔不像有效的訂單資料：只辨識到 {len(matched)} 個已知欄位"
+            f"（至少需 {MIN_KNOWN_COLUMNS} 個）。請確認包含如 "
+            f"Order Id / Shipping Mode / Order Region / order date (DateOrders) 等欄位。"
+        )
+
+    return {"matched_known_columns": matched, "total_columns": len(raw)}
+
+
 def predict_uploaded_csv(file_path_or_buffer, mapping_path: Path, model_path: Path) -> pd.DataFrame:
     """
     Parses a raw CSV file containing new orders, maps categorical fields using 
@@ -59,12 +109,25 @@ def predict_uploaded_csv(file_path_or_buffer, mapping_path: Path, model_path: Pa
     if "order_region" not in meta_df.columns:
         meta_df["order_region"] = "Western Europe"
     if "order_date" not in meta_df.columns:
-        meta_df["order_date"] = "6/10/2026 12:00"
+        # 不捏造日期：缺日期就留空(NaT)，避免假月份污染月份統計
+        meta_df["order_date"] = pd.NaT
         
     # Feature engineering for XGBoost
     X = pd.DataFrame(index=df.index)
-    
-    # 1. Numerical
+
+    # 載入服務一致化產物（與訓練相同的中位數/編碼器類別）；無則回退舊行為（問題四 bug 1/2）
+    serving_medians, serving_label_classes = {}, {}
+    artifact_path = Path(mapping_path).parent / "serving_artifacts.json"
+    if artifact_path.exists():
+        try:
+            with open(artifact_path, "r", encoding="utf-8") as f:
+                _art = json.load(f)
+            serving_medians = _art.get("feature_medians", {}) or {}
+            serving_label_classes = _art.get("label_classes", {}) or {}
+        except Exception:
+            pass
+
+    # 1. Numerical（缺值用『訓練中位數』填補，與訓練一致；無產物時回退 0）
     num_features = [
         "Days for shipment (scheduled)",
         "Product Price",
@@ -75,30 +138,32 @@ def predict_uploaded_csv(file_path_or_buffer, mapping_path: Path, model_path: Pa
     ]
     for col in num_features:
         match = next((c for c in df.columns if c.lower() == col.lower()), None)
+        fill_val = serving_medians.get(col, 0.0)
         if match:
-            X[col] = pd.to_numeric(df[match], errors="coerce")
+            X[col] = pd.to_numeric(df[match], errors="coerce").fillna(fill_val)
         else:
-            X[col] = 0.0
+            X[col] = fill_val
             
     # 2. Date features
     date_col = next((c for c in df.columns if "date" in c.lower()), None)
     if date_col:
         date_series = pd.to_datetime(df[date_col], errors="coerce")
-        X["order_dayofweek"] = date_series.dt.dayofweek.fillna(0).astype(int)
-        X["order_month"] = date_series.dt.month.fillna(6).astype(int)
-        X["order_hour"] = date_series.dt.hour.fillna(12).astype(int)
+        # 與訓練端(data_pipeline)一致：缺值哨兵用 -1（原本服務端用 0/6/12 造成訓練/服務不一致）
+        X["order_dayofweek"] = date_series.dt.dayofweek.fillna(-1).astype(int)
+        X["order_month"] = date_series.dt.month.fillna(-1).astype(int)
+        X["order_hour"] = date_series.dt.hour.fillna(-1).astype(int)
         X["order_is_weekend"] = (date_series.dt.dayofweek >= 5).fillna(0).astype(int)
     else:
-        X["order_dayofweek"] = 0
-        X["order_month"] = 6
-        X["order_hour"] = 12
+        X["order_dayofweek"] = -1
+        X["order_month"] = -1
+        X["order_hour"] = -1
         X["order_is_weekend"] = 0
         
     # 3. Label Encoded features
     label_cols = ["Order Region", "Category Name", "Order Country"]
     for col in label_cols:
         match = next((c for c in df.columns if c.lower() == col.lower()), None)
-        classes = mappings[col]
+        classes = serving_label_classes.get(col, mappings[col])
         if match:
             val_to_idx = {val: idx for idx, val in enumerate(classes)}
             X[f"{col}_encoded"] = df[match].astype(str).map(val_to_idx).fillna(0).astype(int)
