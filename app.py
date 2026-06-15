@@ -47,10 +47,13 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent / "core"))
 try:
     from optimizer import ShippingOptimizer
-    from preprocessor import predict_uploaded_csv
+    from preprocessor import predict_uploaded_csv, validate_upload_columns, UploadValidationError
 except ImportError:
     ShippingOptimizer = None
     predict_uploaded_csv = None
+    validate_upload_columns = None
+    class UploadValidationError(ValueError):
+        pass
 
 
 # ── 常數與路徑 ────────────────────────────────────────────────────────────────
@@ -415,28 +418,42 @@ async def upload_csv(
 
     try:
         contents = await file.read()
+
+        # ── C：上傳驗證閘門 ──────────────────────────────────────────────
+        # 用『原始表頭』偵測重複欄/非訂單資料，不過直接回 400（在標準化之前先擋）。
+        if validate_upload_columns is not None:
+            import csv as _csv
+            text = contents.decode("latin-1", errors="replace")
+            header_line = text.splitlines()[0] if text.strip() else ""
+            original_cols = next(_csv.reader([header_line])) if header_line.strip() else []
+            validate_upload_columns(original_cols)
+
         mapping_path = BASE_DIR / "models" / "feature_mapping.json"
         model_path = BASE_DIR / "models" / "xgboost_model.json"
-        
+
         df_predicted = predict_uploaded_csv(
             io.BytesIO(contents),
             mapping_path=mapping_path,
             model_path=model_path
         )
-        
+
         if x_session_id:
             safe_id = "".join(c for c in x_session_id if c.isalnum() or c in ("-", "_"))
             save_path = DATA_DIR / f"predictions_session_{safe_id}.csv"
         else:
             save_path = PREDICTIONS_PATH
-            
+
         df_predicted.to_csv(save_path, index=False)
-        
+
         return {
             "success": True,
             "message": f"成功處理 {len(df_predicted)} 筆訂單資料，並已更新延遲預測結果！",
             "count": len(df_predicted)
         }
+    except HTTPException:
+        raise
+    except UploadValidationError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"CSV 檔案處理或預測失敗：{str(e)}")
 

@@ -99,6 +99,7 @@ class DataPipeline:
         self.max_test_rows = max_test_rows
         self.de_identifier = DeIdentifier(hash_salt=hash_salt)
         self.label_encoders: dict = {}
+        self.feature_medians: dict = {}
 
     # ── 公開方法 ───────────────────────────────────────────────────────────
 
@@ -141,6 +142,9 @@ class DataPipeline:
 
         # Step 6：特徵工程
         X = self.engineer_features(df)
+
+        # Step 6.5：保存服務端一致化產物（中位數 + 編碼器類別）
+        self.save_serving_artifacts(output_dir)
 
         # Step 7：train/test split
         X_train_full, X_test, y_train_full, y_test, meta_train_full, meta_test = train_test_split(
@@ -292,12 +296,31 @@ class DataPipeline:
 
         X = pd.concat(feature_frames, axis=1)
 
-        # 填補缺失值（數值用中位數）
-        X = X.fillna(X.median(numeric_only=True))
+        # 填補缺失值（數值用中位數）；同時保存中位數供服務端(preprocessor)一致填補
+        _medians = X.median(numeric_only=True)
+        self.feature_medians = _medians.to_dict()
+        X = X.fillna(_medians)
 
         print(f"  最終特徵矩陣：{X.shape[0]} 筆 × {X.shape[1]} 特徵")
         print(f"  特徵欄位：{list(X.columns)}")
         return X
+
+    def save_serving_artifacts(self, output_dir: str) -> None:
+        """保存服務端(preprocessor)一致化所需的訓練產物：數值中位數 + Label 編碼器類別，
+        讓上傳預測與訓練使用相同填補值與編碼，消除訓練/服務不一致（問題四 bug 1/2）。"""
+        import json as _json
+        try:
+            models_dir = Path(output_dir).parent.parent / "models"
+            models_dir.mkdir(parents=True, exist_ok=True)
+            artifact = {
+                "feature_medians": {k: float(v) for k, v in (self.feature_medians or {}).items()},
+                "label_classes": {col: list(map(str, le.classes_)) for col, le in self.label_encoders.items()},
+            }
+            with open(models_dir / "serving_artifacts.json", "w", encoding="utf-8") as f:
+                _json.dump(artifact, f, ensure_ascii=False, indent=2)
+            print(f"  [Serving] 已保存服務一致化產物：{models_dir / 'serving_artifacts.json'}")
+        except Exception as e:
+            print(f"  [Serving] 保存服務產物失敗（不影響訓練）：{e}")
 
     def extract_metadata(self, df: pd.DataFrame) -> pd.DataFrame:
         """
