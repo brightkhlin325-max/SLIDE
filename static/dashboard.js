@@ -54,6 +54,54 @@ async function reloadBossBoard() {
   renderBossTable(p.data || []);
 }
 
+// LIME 歸因彈窗：元件化重構時此函式遺失（原本只存在於 index_original.html），
+// 在此補回，並加入因子來源小標（本訂單實際值 / 模型整體因子）。
+async function openExplainModal(orderId) {
+  const modal = document.getElementById('explainModal');
+  if (!modal) return;
+  document.getElementById('modalOrderId').textContent = displayOrderId(orderId);
+  document.getElementById('modalOrderId').title = orderId;
+  document.getElementById('modalProb').textContent = '讀取中...';
+  document.getElementById('modalPenalty').textContent = '讀取中...';
+  document.getElementById('modalSummaryText').textContent = '讀取中...';
+  document.getElementById('modalFactorsList').innerHTML = '讀取中...';
+  modal.style.display = 'flex';
+
+  try {
+    const res = await fetch(`${API_BASE}/api/explain/${orderId}`, {
+      headers: { 'X-Role': window.edisState.currentRole === 'manager' ? 'Logistics_Manager' : 'Viewer' }
+    });
+    if (!res.ok) throw new Error('分析資料讀取失敗');
+    const data = await res.json();
+
+    document.getElementById('modalProb').textContent = (data.p_late * 100).toFixed(1) + '%';
+    document.getElementById('modalPenalty').textContent = '$' + Math.round(data.expected_penalty).toLocaleString();
+    document.getElementById('modalSummaryText').textContent = data.manager_summary || '無摘要。';
+
+    const factors = data.top_x_factors || [];
+    document.getElementById('modalFactorsList').innerHTML = factors.map(f => `
+      <div style="padding:10px 14px; border:1px solid var(--border); border-radius:8px; background:#fcfcfc; display:flex; justify-content:space-between; align-items:center; gap:12px;">
+        <div>
+          <div style="font-size:12px; font-weight:600; color:var(--text);">${f.label || f.feature}${factorScopeTag(f)}</div>
+          <div style="font-size:11.5px; color:var(--muted); margin-top:2px;">${f.evidence}</div>
+        </div>
+        <span class="risk-pill ${f.impact === 'raises risk' ? 'r-high' : 'r-low'}" style="font-size:10px; font-weight:600; white-space:nowrap;">
+          ${f.impact === 'raises risk' ? '▲ 增加延遲風險' : '▼ 正常或次要因子'}
+        </span>
+      </div>
+    `).join('');
+  } catch (e) {
+    document.getElementById('modalSummaryText').textContent = '載入分析失敗: ' + e.message;
+  }
+}
+window.openExplainModal = openExplainModal;
+
+function closeExplainModal() {
+  const modal = document.getElementById('explainModal');
+  if (modal) modal.style.display = 'none';
+}
+window.closeExplainModal = closeExplainModal;
+
 async function refreshDashboard() {
   try {
     const [p, executive, scenarios, tuning] = await Promise.all([
@@ -221,7 +269,7 @@ function renderBossTable(data) {
         <td>
           <div class="prob-wrap">
             <div class="prob-bar"><div class="prob-fill ${fillClass(o.p_late)}" style="width:${o.p_late*100}%"></div></div>
-            <span class="prob-val">${(o.p_late*100).toFixed(0)}%</span>
+            <span class="prob-val">${(o.p_late*100).toFixed(1)}%</span>
           </div>
         </td>
         <td style="font-size:11px; color:var(--muted);">${getReasonText(o)}</td>
