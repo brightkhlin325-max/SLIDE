@@ -531,9 +531,6 @@ body {
     <a class="nav-item" id="nav-rbac" onclick="showPage('rbac')">
       <i class="nav-icon">○</i> RBAC 權限矩陣
     </a>
-    <a class="nav-item" id="nav-settings" onclick="showPage('settings')">
-      <i class="nav-icon">⚙</i> 系統設定
-    </a>
     <a class="nav-item" id="nav-llm-settings" onclick="showPage('llm-settings')">
       <i class="nav-icon">🤖</i> LLM 設定
     </a>
@@ -1239,88 +1236,6 @@ body {
       </div>
     </div>
 
-    <!-- G. SYSTEM SETTINGS PANEL -->
-    <div class="page-section hidden" id="page-settings">
-      <div class="page-header fade-in">
-        <div class="page-title">系統設定</div>
-        <div class="page-sub">延遲判定門檻與模式建議設定</div>
-      </div>
-
-      <div class="panel fade-in" style="margin-bottom: 24px; padding: 18px 20px; background: var(--card); border: 1px solid var(--border); border-radius: 12px;">
-        <div class="panel-title" style="margin-bottom:12px;">延遲判定門檻值 (Threshold)</div>
-        <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: center; justify-content: space-between;">
-          <div style="flex: 1; min-width: 300px; display: flex; flex-direction: column; gap: 8px;">
-            <div style="display: flex; align-items: center; gap: 16px; width: 100%;">
-              <div style="flex-shrink: 0; min-width: 130px;">
-                <label class="field-label" style="font-weight:600; font-size:11px; margin-bottom:2px; display: flex; align-items: center; gap: 4px;">
-                  目前門檻值
-                  <span style="cursor: pointer; color: var(--navy); font-weight: bold; background: rgba(67,112,150,0.1); width: 14px; height: 14px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 10px;" title="機器學習模型預測延遲機率大於此門檻時，即判定為延遲並啟動後續調度考量。">?</span>
-                </label>
-                <span style="font-size: 15px; font-weight: 700; color: var(--navy); font-family:'DM Mono',monospace;" id="thresholdValDisplay">0.50</span>
-              </div>
-              <input type="range" id="thresholdSlider" min="0.10" max="0.90" step="0.05" value="0.50" oninput="updateThreshold(this.value)" style="flex: 1; height: 6px; background: var(--border); border-radius: 3px; outline: none; cursor: pointer;">
-            </div>
-            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 11px;">
-              <span style="color: var(--muted); font-weight: 500;">快速套用：</span>
-              <button id="badgeF1Btn" onclick="applyThresholdRecommendation('f1')" style="background: rgba(16, 185, 129, 0.1); color: #059669; border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 4px; padding: 2px 6px; cursor: pointer; font-size: 10px; font-weight: 600;">
-                ⚖ 平衡模式 (F1): <span id="badgeF1Val">0.45</span>
-              </button>
-              <button id="badgeCostBtn" onclick="applyThresholdRecommendation('cost')" style="background: rgba(245, 158, 11, 0.1); color: #d97706; border: 1px solid rgba(245, 158, 11, 0.2); border-radius: 4px; padding: 2px 6px; cursor: pointer; font-size: 10px; font-weight: 600;">
-                💰 成本最低模式: <span id="badgeCostVal">0.35</span>
-              </button>
-              <span id="sopStatusLockWrap" style="margin-left: auto; display: flex; align-items: center; gap: 4px;">
-                <!-- SOP lock widgets dynamically populated -->
-              </span>
-            </div>
-          </div>
-          <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-            <input type="file" id="csvFileInput" accept=".csv" style="display:none;" onchange="uploadTrainingCSV(this)">
-            <a href="/static/template.csv" download="template.csv" class="run-btn" id="downloadTemplateBtn" style="width:auto; padding: 8px 16px; background: var(--steel); border-radius: 6px; font-size:12px; display:flex; align-items:center; gap:6px; text-decoration:none; color:white;">
-              📥 下載回填範本 CSV
-            </a>
-            <button class="run-btn" id="uploadCsvBtn" onclick="document.getElementById('csvFileInput').click()" style="width:auto; padding: 8px 16px; background: var(--navy); border-radius: 6px; font-size:12px; display:flex; align-items:center; gap:6px;">
-              📤 回填已知結果 CSV
-            </button>
-            <button class="run-btn hidden" id="resetCsvBtn" onclick="resetCSV()" style="width:auto; padding: 8px 16px; background: #e07b54; border-radius: 6px; font-size:12px; display:none;">
-              🔄 還原驗證集
-            </button>
-            <span id="lockedUploadBox" class="locked-box" style="font-size:11px; padding:6px 12px; border-radius:6px; margin:0;">
-              🔒 需 Manager 權限以回填訓練資料
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Threshold tuning recommendation -->
-      <div class="panel fade-in" id="thresholdTuningPanel" style="margin-bottom:24px; padding:16px 20px; display:none;">
-        <div style="display:flex; justify-content:space-between; gap:16px; align-items:flex-start; flex-wrap:wrap; margin-bottom:14px;">
-          <div>
-            <div class="panel-title">門檻模式建議</div>
-            <div class="panel-subtitle">依目前訂單資料即時計算預警命中、延遲抓取與預估成本；F1 代表兼顧命中率與抓到率的綜合分數</div>
-          </div>
-          <div id="thresholdTuningNote" style="font-size:12px; color:var(--muted);"></div>
-        </div>
-        <div style="display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px;" id="thresholdTuningCards">
-          <div class="stat-box">
-            <div class="stat-label">目前門檻</div>
-            <div class="stat-value" id="tuneCurrentThreshold">--</div>
-            <div class="exec-note" id="tuneCurrentMetrics">載入中...</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-label" title="F1 是兼顧命中率與抓到率的綜合分數，用來挑選不過度漏判、也不過度誤報的門檻。">平衡模式 (F1)</div>
-            <div class="stat-value green" id="tuneBestF1Threshold">--</div>
-            <div class="exec-note" id="tuneBestF1Metrics">載入中...</div>
-            <button class="run-btn" onclick="applyThresholdRecommendation('f1')" style="margin-top:10px; padding:7px 10px; font-size:12px;">套用平衡模式 (F1)</button>
-          </div>
-          <div class="stat-box">
-            <div class="stat-label" title="依升級成本與漏判延遲成本估算總損失最低的門檻。">成本最低模式</div>
-            <div class="stat-value warm" id="tuneBestCostThreshold">--</div>
-            <div class="exec-note" id="tuneBestCostMetrics">載入中...</div>
-            <button class="run-btn" onclick="applyThresholdRecommendation('cost')" style="margin-top:10px; padding:7px 10px; font-size:12px; background:var(--warm);">套用成本最低模式</button>
-          </div>
-        </div>
-      </div>
-    </div>
 
     <!-- H. LLM SETTINGS PANEL -->
     <div class="page-section hidden" id="page-llm-settings">

@@ -155,10 +155,10 @@ function updateThreshold(val) {
   window.edisState.threshold = num;
   
   // 同步所有存在於頁面中的 Slider 與數值顯示
-  const slider1 = document.getElementById('thresholdSlider');
-  const display1 = document.getElementById('thresholdValDisplay');
-  if (slider1) slider1.value = num.toFixed(2);
-  if (display1) display1.textContent = num.toFixed(2);
+  const sliders = document.querySelectorAll('.thresholdSlider');
+  sliders.forEach(s => s.value = num.toFixed(2));
+  const displays = document.querySelectorAll('.thresholdValDisplay');
+  displays.forEach(d => d.textContent = num.toFixed(2));
 
   const slider2 = document.getElementById('perfThresholdSlider');
   const display2 = document.getElementById('perfThresholdDisplay');
@@ -173,45 +173,53 @@ function updateThreshold(val) {
 
 // ── 6. SOP 與沙盒模擬控制 (Viewer & Manager 權限防禦) ──────────────────────────
 function updateSopUI() {
-  const slider = document.getElementById('thresholdSlider');
-  const lockWrap = document.getElementById('sopStatusLockWrap');
+  const sliders = document.querySelectorAll('.thresholdSlider');
+  const lockWraps = document.querySelectorAll('.sopStatusLockWrap');
   const badge = document.getElementById('sopRoleBadge');
-  if (!slider) return;
+  if (sliders.length === 0) return;
 
   const badgeSpan = (bg, color, border, text) =>
     `<span style="background:${bg}; color:${color}; border:1px solid ${border}; border-radius:20px; padding:3px 12px; font-size:11px; font-weight:700; display:inline-block;">${text}</span>`;
 
-  if (window.edisState.currentRole === 'manager') {
+  if (window.edisState.currentRole === 'manager' || window.edisState.currentRole === 'engineer') {
     window.edisState.isSandboxMode = false;
-    slider.disabled = false;
-    if (badge) badge.innerHTML = badgeSpan('rgba(5,150,105,0.1)', '#059669', 'rgba(5,150,105,0.3)', '● 管理者模式');
-    if (lockWrap) {
-      lockWrap.innerHTML = `
+    sliders.forEach(s => s.disabled = false);
+    if (badge) {
+      if (window.edisState.currentRole === 'engineer') {
+        badge.innerHTML = badgeSpan('rgba(67,112,150,0.1)', '#437096', 'rgba(67,112,150,0.3)', '● 工程師模式');
+      } else {
+        badge.innerHTML = badgeSpan('rgba(5,150,105,0.1)', '#059669', 'rgba(5,150,105,0.3)', '● 管理者模式');
+      }
+    }
+    lockWraps.forEach(lw => {
+      lw.innerHTML = `
         <button onclick="publishSopThreshold()" class="run-btn" style="width:auto; padding:2px 8px; font-size:10px; font-weight:bold; background:var(--navy);">發佈為公司 SOP 基準</button>
       `;
-    }
+    });
   } else {
     // Viewer 唯讀，除非啟動沙盒模擬
     if (window.edisState.isSandboxMode) {
-      slider.disabled = false;
+      sliders.forEach(s => s.disabled = false);
       if (badge) badge.innerHTML = badgeSpan('rgba(217,119,6,0.1)', '#d97706', 'rgba(217,119,6,0.3)', '🔓 沙盒模擬中（不影響正式 SOP）');
-      if (lockWrap) {
-        lockWrap.innerHTML = `
+      lockWraps.forEach(lw => {
+        lw.innerHTML = `
           <button onclick="toggleSandboxMode()" style="background:#dc2626; color:white; border:none; border-radius:4px; padding:2px 8px; cursor:pointer; font-size:10px; font-weight:bold;">恢復 SOP</button>
         `;
-      }
+      });
     } else {
-      slider.disabled = true;
-      slider.value = window.edisState.sopDefaultThreshold.toFixed(2);
-      const display = document.getElementById('thresholdValDisplay');
-      if (display) display.textContent = window.edisState.sopDefaultThreshold.toFixed(2);
+      sliders.forEach(s => {
+        s.disabled = true;
+        s.value = window.edisState.sopDefaultThreshold.toFixed(2);
+      });
+      const displays = document.querySelectorAll('.thresholdValDisplay');
+      displays.forEach(d => d.textContent = window.edisState.sopDefaultThreshold.toFixed(2));
       window.edisState.threshold = window.edisState.sopDefaultThreshold;
       if (badge) badge.innerHTML = badgeSpan('rgba(220,38,38,0.08)', '#dc2626', 'rgba(220,38,38,0.2)', '🔒 SOP 已鎖定');
-      if (lockWrap) {
-        lockWrap.innerHTML = `
+      lockWraps.forEach(lw => {
+        lw.innerHTML = `
           <button onclick="toggleSandboxMode()" style="background:var(--steel); color:white; border:none; border-radius:4px; padding:2px 8px; cursor:pointer; font-size:10px; font-weight:bold;">啟動沙盒模擬</button>
         `;
-      }
+      });
     }
   }
 }
@@ -223,7 +231,7 @@ function toggleSandboxMode() {
 }
 
 function publishSopThreshold() {
-  const newSop = parseFloat(document.getElementById('thresholdSlider').value);
+  const newSop = parseFloat(document.querySelector('.thresholdSlider').value);
   window.edisState.sopDefaultThreshold = newSop;
   showToast(`已將門檻值 ${newSop.toFixed(2)} 發佈為公司新季度 SOP 基準門檻！`, 'success');
   updateSopUI();
@@ -532,10 +540,18 @@ async function uploadTrainingCSV(input) {
   const file = input.files[0];
   if (!file) return;
   
-  const uploadBtn = document.getElementById('uploadCsvBtn');
-  const originalHtml = uploadBtn.innerHTML;
-  uploadBtn.innerHTML = '<span class="spinner"></span>回填中...';
-  uploadBtn.disabled = true;
+  const uploadBtns = document.querySelectorAll('.uploadCsvBtn');
+  uploadBtns.forEach(btn => {
+    btn.disabled = true;
+  });
+  
+  const parent = input.parentElement;
+  const currentUploadBtn = parent.querySelector('.uploadCsvBtn');
+  let originalHtml = '';
+  if (currentUploadBtn) {
+    originalHtml = currentUploadBtn.innerHTML;
+    currentUploadBtn.innerHTML = '<span class="spinner"></span>回填中...';
+  }
   
   const formData = new FormData();
   formData.append('file', file);
@@ -554,21 +570,25 @@ async function uploadTrainingCSV(input) {
   } catch (e) {
     alert('訓練資料回填失敗: ' + e.message);
   } finally {
-    uploadBtn.innerHTML = originalHtml;
-    uploadBtn.disabled = false;
+    uploadBtns.forEach(btn => {
+      btn.disabled = false;
+    });
+    if (currentUploadBtn) {
+      currentUploadBtn.innerHTML = originalHtml;
+    }
     input.value = '';
   }
 }
 
 async function resetCSV() {
-  const resetBtn = document.getElementById('resetCsvBtn');
-  resetBtn.disabled = true;
+  const resetBtns = document.querySelectorAll('.resetCsvBtn');
+  resetBtns.forEach(btn => btn.disabled = true);
   try {
     const res = await fetch(`${API_BASE}/api/reset-orders`, {
       method: 'POST'
     });
     if (res.ok) {
-      resetBtn.style.display = 'none';
+      resetBtns.forEach(btn => btn.style.display = 'none');
       const aiResetBtn = document.getElementById('aiResetPredictBtn');
       if (aiResetBtn) aiResetBtn.style.display = 'none';
       const aiStatus = document.getElementById('aiUploadStatus');
@@ -583,7 +603,7 @@ async function resetCSV() {
   } catch (e) {
     alert('重設失敗: ' + e.message);
   } finally {
-    resetBtn.disabled = false;
+    resetBtns.forEach(btn => btn.disabled = false);
   }
 }
 
@@ -601,14 +621,31 @@ async function uploadPredictionCSV(input) {
   const file = input.files[0];
   if (!file) return;
 
-  const btn = document.getElementById('aiUploadPredictBtn');
-  const status = document.getElementById('aiUploadStatus');
-  const originalText = btn.textContent;
-  btn.textContent = '...';
-  btn.disabled = true;
-  status.textContent = '正在上傳並產生延遲預測...';
-  appendAIMessage('user', `上傳待預測資料檔案：${file.name}`);
-  appendAIMessage('system', '正在上傳待預測資料並運行 XGBoost 推論...');
+  const parent = input.parentElement;
+  const currentUploadBtn = parent.querySelector('.uploadPredictBtn') || parent.querySelector('.uploadCsvBtn');
+  let originalHtml = '';
+  
+  const isLlmUpload = input.id === 'aiPredictCsvInput';
+  
+  if (isLlmUpload) {
+    const btn = document.getElementById('aiUploadPredictBtn');
+    const status = document.getElementById('aiUploadStatus');
+    const originalText = btn ? btn.textContent : '';
+    if (btn) {
+      btn.textContent = '...';
+      btn.disabled = true;
+    }
+    if (status) status.textContent = '正在上傳並產生延遲預測...';
+    appendAIMessage('user', `上傳待預測資料檔案：${file.name}`);
+    appendAIMessage('system', '正在上傳待預測資料並運行 XGBoost 推論...');
+  } else {
+    const uploadBtns = document.querySelectorAll('.uploadPredictBtn');
+    uploadBtns.forEach(btn => btn.disabled = true);
+    if (currentUploadBtn) {
+      originalHtml = currentUploadBtn.innerHTML;
+      currentUploadBtn.innerHTML = '<span class="spinner"></span>上傳中...';
+    }
+  }
 
   const formData = new FormData();
   formData.append('file', file);
@@ -623,18 +660,43 @@ async function uploadPredictionCSV(input) {
       throw new Error(err.detail || '預測上傳失敗');
     }
     const data = await res.json();
-    status.textContent = `${data.message} 目前介面已顯示上傳檔案的延遲預測。`;
-    appendAIMessage('assistant', `✅ ${data.message}\n目前系統已載入此批預測數據，您可以繼續向我詢問該批物流風險分析或調整預算執行最佳化！`);
-    const aiResetBtn = document.getElementById('aiResetPredictBtn');
-    if (aiResetBtn) aiResetBtn.style.display = 'inline-flex';
-    document.getElementById('resetCsvBtn').style.display = 'inline-flex';
+    
+    if (isLlmUpload) {
+      const status = document.getElementById('aiUploadStatus');
+      if (status) status.textContent = `${data.message} 目前介面已顯示上傳檔案的延遲預測。`;
+      appendAIMessage('assistant', `✅ ${data.message}\n目前系統已載入此批預測數據，您可以繼續向我詢問該批物流風險分析或調整預算執行最佳化！`);
+      const aiResetBtn = document.getElementById('aiResetPredictBtn');
+      if (aiResetBtn) aiResetBtn.style.display = 'inline-flex';
+    } else {
+      showToast(data.message, 'success');
+    }
+    
+    const resetBtns = document.querySelectorAll('.resetCsvBtn');
+    resetBtns.forEach(btn => btn.style.display = 'inline-flex');
+    
     await refreshDashboard();
   } catch (e) {
-    status.textContent = '預測上傳失敗：' + e.message;
-    appendAIMessage('system', '預測上傳失敗：' + e.message);
+    if (isLlmUpload) {
+      const status = document.getElementById('aiUploadStatus');
+      if (status) status.textContent = '預測上傳失敗：' + e.message;
+      appendAIMessage('system', '預測上傳失敗：' + e.message);
+    } else {
+      alert('預測資料上傳失敗: ' + e.message);
+    }
   } finally {
-    btn.textContent = originalText;
-    btn.disabled = false;
+    if (isLlmUpload) {
+      const btn = document.getElementById('aiUploadPredictBtn');
+      if (btn) {
+        btn.textContent = '➕';
+        btn.disabled = false;
+      }
+    } else {
+      const uploadBtns = document.querySelectorAll('.uploadPredictBtn');
+      uploadBtns.forEach(btn => btn.disabled = false);
+      if (currentUploadBtn) {
+        currentUploadBtn.innerHTML = originalHtml;
+      }
+    }
     input.value = '';
   }
 }
@@ -824,7 +886,8 @@ function updateLLMKeyInputState() {
 
 async function loadLLMSettings() {
   updateLLMSettingsAccess();
-  if (window.edisState.currentRole !== 'manager') return;
+  const isMOrEng = window.edisState.currentRole === 'manager' || window.edisState.currentRole === 'engineer';
+  if (!isMOrEng) return;
 
   const status = document.getElementById('llmSettingsStatus');
   if (status) status.textContent = '讀取設定中...';
@@ -851,7 +914,8 @@ async function loadLLMSettings() {
 }
 
 async function saveLLMSettings() {
-  if (window.edisState.currentRole !== 'manager') return;
+  const isMOrEng = window.edisState.currentRole === 'manager' || window.edisState.currentRole === 'engineer';
+  if (!isMOrEng) return;
 
   const btn = document.getElementById('llmSaveBtn');
   const status = document.getElementById('llmSettingsStatus');
@@ -889,16 +953,27 @@ async function saveLLMSettings() {
 }
 
 function updateLLMSettingsAccess() {
-  const isM = window.edisState.currentRole === 'manager';
+  const role = window.edisState.currentRole;
+  const isM = role === 'manager';
+  const isEng = role === 'engineer';
+  const isMOrEng = isM || isEng;
   const badge = document.getElementById('llmSettingsRoleBadge');
   const locked = document.getElementById('llmSettingsLocked');
   const form = document.getElementById('llmSettingsForm');
   if (badge) {
-    badge.className = isM ? 'role-badge badge-manager' : 'role-badge badge-viewer';
-    badge.textContent = isM ? 'Manager' : 'Viewer';
+    if (isEng) {
+      badge.className = 'role-badge badge-engineer';
+      badge.textContent = 'Engineer';
+    } else if (isM) {
+      badge.className = 'role-badge badge-manager';
+      badge.textContent = 'Manager';
+    } else {
+      badge.className = 'role-badge badge-viewer';
+      badge.textContent = 'Viewer';
+    }
   }
-  if (locked) locked.style.display = isM ? 'none' : 'block';
-  if (form) form.style.display = isM ? 'grid' : 'none';
+  if (locked) locked.style.display = isMOrEng ? 'none' : 'block';
+  if (form) form.style.display = isMOrEng ? 'grid' : 'none';
 }
 
 // ── 12. Dashboard 渲染邏輯 ────────────────────────────────────────────────────
@@ -1281,22 +1356,23 @@ function formatTuneMetrics(row) {
 
 function renderThresholdTuning(data) {
   window.edisState.lastThresholdTuning = data;
-  const panel = document.getElementById('thresholdTuningPanel');
-  if (!panel || !data) return;
-  panel.style.display = 'block';
+  const panels = document.querySelectorAll('.thresholdTuningPanel');
+  if (panels.length === 0 || !data) return;
+  panels.forEach(p => p.style.display = 'block');
 
-  document.getElementById('thresholdTuningNote').textContent =
-    `${data.row_count.toLocaleString()} 筆資料 · 升級成本 $${data.cost_model.upgrade_cost} · 漏判成本 $${data.cost_model.delay_penalty}`
+  const note = `${data.row_count.toLocaleString()} 筆資料 · 升級成本 $${data.cost_model.upgrade_cost} · 漏判成本 $${data.cost_model.delay_penalty}`
     + (data.basis_note ? ` · ${data.basis_note}` : '');
 
-  document.getElementById('tuneCurrentThreshold').textContent = data.current.threshold.toFixed(2);
-  document.getElementById('tuneCurrentMetrics').textContent = formatTuneMetrics(data.current);
+  document.querySelectorAll('.thresholdTuningNote').forEach(el => el.textContent = note);
 
-  document.getElementById('tuneBestF1Threshold').textContent = data.best_f1.threshold.toFixed(2);
-  document.getElementById('tuneBestF1Metrics').textContent = formatTuneMetrics(data.best_f1);
+  document.querySelectorAll('.tuneCurrentThreshold').forEach(el => el.textContent = data.current.threshold.toFixed(2));
+  document.querySelectorAll('.tuneCurrentMetrics').forEach(el => el.textContent = formatTuneMetrics(data.current));
 
-  document.getElementById('tuneBestCostThreshold').textContent = data.best_expected_cost.threshold.toFixed(2);
-  document.getElementById('tuneBestCostMetrics').textContent = formatTuneMetrics(data.best_expected_cost);
+  document.querySelectorAll('.tuneBestF1Threshold').forEach(el => el.textContent = data.best_f1.threshold.toFixed(2));
+  document.querySelectorAll('.tuneBestF1Metrics').forEach(el => el.textContent = formatTuneMetrics(data.best_f1));
+
+  document.querySelectorAll('.tuneBestCostThreshold').forEach(el => el.textContent = data.best_expected_cost.threshold.toFixed(2));
+  document.querySelectorAll('.tuneBestCostMetrics').forEach(el => el.textContent = formatTuneMetrics(data.best_expected_cost));
   
   if (document.getElementById('badgeF1Val')) {
     document.getElementById('badgeF1Val').textContent = data.best_f1.threshold.toFixed(2);
@@ -1318,7 +1394,7 @@ function applyThresholdRecommendation(type) {
     ? window.edisState.lastThresholdTuning.best_expected_cost
     : window.edisState.lastThresholdTuning.best_f1;
     
-  if (window.edisState.currentRole === 'manager' && !window.edisState.isSandboxMode) {
+  if ((window.edisState.currentRole === 'manager' || window.edisState.currentRole === 'engineer') && !window.edisState.isSandboxMode) {
     window.edisState.isSandboxMode = true;
   }
   
@@ -1988,7 +2064,7 @@ async function setRole(role) {
     'nav-model-perf': isEng,
     'nav-region-map': isEng,
     'nav-rbac': isEng,
-    'nav-llm-settings': isEng
+    'nav-llm-settings': isMOrEng
   };
 
   for (const [id, visible] of Object.entries(navItems)) {
@@ -1999,7 +2075,7 @@ async function setRole(role) {
   // If current page is not allowed for the new role, switch to dashboard
   const allowedPages = {
     viewer: ['dashboard', 'optimization'],
-    manager: ['dashboard', 'optimization', 'risk-list', 'ai-assistant'],
+    manager: ['dashboard', 'optimization', 'risk-list', 'ai-assistant', 'llm-settings'],
     engineer: ['dashboard', 'optimization', 'risk-list', 'ai-assistant', 'model-perf', 'region-map', 'rbac', 'llm-settings']
   };
 
@@ -2015,10 +2091,10 @@ async function setRole(role) {
   }
 
   // CSV Upload button and locked box control
-  const uploadCsvBtn = document.getElementById('uploadCsvBtn');
-  if (uploadCsvBtn) uploadCsvBtn.style.display = isMOrEng ? 'inline-flex' : 'none';
-  const lockedUploadBox = document.getElementById('lockedUploadBox');
-  if (lockedUploadBox) lockedUploadBox.style.display = isMOrEng ? 'none' : 'inline-flex';
+  const uploadCsvBtns = document.querySelectorAll('.uploadCsvBtn, .uploadPredictBtn');
+  uploadCsvBtns.forEach(btn => btn.style.display = isMOrEng ? 'inline-flex' : 'none');
+  const lockedUploadBoxes = document.querySelectorAll('.lockedUploadBox, .lockedPredictBox');
+  lockedUploadBoxes.forEach(box => box.style.display = isMOrEng ? 'none' : 'inline-flex');
   
   const aiUploadBtn = document.getElementById('aiUploadPredictBtn');
   const aiBriefBtn = document.getElementById('aiGenerateBriefBtn');
@@ -2037,20 +2113,20 @@ async function setRole(role) {
     loadLLMSettings();
   }
   
-  const resetCsvBtn = document.getElementById('resetCsvBtn');
-  if (resetCsvBtn) {
+  const resetCsvBtns = document.querySelectorAll('.resetCsvBtn');
+  if (resetCsvBtns.length > 0) {
     if (!isMOrEng) {
-      resetCsvBtn.style.display = 'none';
+      resetCsvBtns.forEach(btn => btn.style.display = 'none');
       const aiResetBtn = document.getElementById('aiResetPredictBtn');
       if (aiResetBtn) aiResetBtn.style.display = 'none';
     } else {
       const m = await fetchMetrics();
       if (m && m.is_active) {
-        resetCsvBtn.style.display = 'inline-flex';
+        resetCsvBtns.forEach(btn => btn.style.display = 'inline-flex');
         const aiResetBtn = document.getElementById('aiResetPredictBtn');
         if (aiResetBtn) aiResetBtn.style.display = 'inline-flex';
       } else {
-        resetCsvBtn.style.display = 'none';
+        resetCsvBtns.forEach(btn => btn.style.display = 'none');
         const aiResetBtn = document.getElementById('aiResetPredictBtn');
         if (aiResetBtn) aiResetBtn.style.display = 'none';
       }

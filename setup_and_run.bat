@@ -30,23 +30,34 @@ echo EDIS Setup and Run Script
 echo ==========================================
 echo [INFO] Project: %CD%
 
-:: 1. Locate Conda. Using `conda run` also supports custom environment paths.
-set "CONDA_CMD="
-where conda.exe >nul 2>nul
-if %errorlevel% equ 0 set "CONDA_CMD=conda.exe"
-if not defined CONDA_CMD if exist "%USERPROFILE%\anaconda3\condabin\conda.bat" set "CONDA_CMD=%USERPROFILE%\anaconda3\condabin\conda.bat"
-if not defined CONDA_CMD if exist "%USERPROFILE%\miniconda3\condabin\conda.bat" set "CONDA_CMD=%USERPROFILE%\miniconda3\condabin\conda.bat"
-if not defined CONDA_CMD if exist "C:\ProgramData\anaconda3\condabin\conda.bat" set "CONDA_CMD=C:\ProgramData\anaconda3\condabin\conda.bat"
-if not defined CONDA_CMD if exist "C:\ProgramData\miniconda3\condabin\conda.bat" set "CONDA_CMD=C:\ProgramData\miniconda3\condabin\conda.bat"
+:: 1. Check for local Python virtual environment (.venv) first, then fallback to Conda.
+set "USE_VENV=0"
+if exist ".venv\Scripts\python.exe" (
+    set "USE_VENV=1"
+    set "RUN_CMD=.venv\Scripts\python.exe"
+    echo [INFO] Local Python virtual environment venv detected.
+) else (
+    set "CONDA_CMD="
+    where conda.exe >nul 2>nul
+    if %errorlevel% equ 0 set "CONDA_CMD=conda.exe"
+    if not defined CONDA_CMD if exist "%USERPROFILE%\anaconda3\condabin\conda.bat" set "CONDA_CMD=%USERPROFILE%\anaconda3\condabin\conda.bat"
+    if not defined CONDA_CMD if exist "%USERPROFILE%\miniconda3\condabin\conda.bat" set "CONDA_CMD=%USERPROFILE%\miniconda3\condabin\conda.bat"
+    if not defined CONDA_CMD if exist "C:\ProgramData\anaconda3\condabin\conda.bat" set "CONDA_CMD=C:\ProgramData\anaconda3\condabin\conda.bat"
+    if not defined CONDA_CMD if exist "C:\ProgramData\miniconda3\condabin\conda.bat" set "CONDA_CMD=C:\ProgramData\miniconda3\condabin\conda.bat"
+)
 
-if not defined CONDA_CMD (
-    echo [ERROR] Conda was not found.
-    echo Install Miniconda or Anaconda, then reopen this script.
-    pause
-    exit /b 1
+if %USE_VENV% equ 0 (
+    if not defined CONDA_CMD (
+        echo [ERROR] Conda was not found.
+        echo Install Miniconda or Anaconda, then reopen this script.
+        pause
+        exit /b 1
+    )
 )
 
 :: 2. Create the environment only when missing; avoid slow updates on every run.
+if %USE_VENV% equ 1 goto use_venv_env
+
 echo [INFO] Checking Conda environment "%ENV_NAME%"...
 call "%CONDA_CMD%" run -n "%ENV_NAME%" python --version >nul 2>nul
 if errorlevel 1 (
@@ -70,6 +81,16 @@ if errorlevel 1 (
         echo [INFO] Repair completed.
     )
 )
+set "RUN_CMD="%CONDA_CMD%" run -n "%ENV_NAME%" python"
+set "RUN_CMD_INTERACTIVE="%CONDA_CMD%" run --no-capture-output -n "%ENV_NAME%" python"
+goto env_done
+
+:use_venv_env
+echo [INFO] Using virtual environment venv.
+set "RUN_CMD=.venv\Scripts\python.exe"
+set "RUN_CMD_INTERACTIVE=.venv\Scripts\python.exe"
+
+:env_done
 
 :: 3. Existing predictions and model files are enough to run the application.
 :: The raw Kaggle dataset is required only when these artifacts must be rebuilt.
@@ -93,7 +114,7 @@ echo [INFO] Model and prediction files are ready.
 
 if /I "%~1"=="tune-threshold" (
     echo [INFO] Running threshold tuning report...
-    call "%CONDA_CMD%" run --no-capture-output -n "%ENV_NAME%" python scripts\tune_threshold.py
+    call %RUN_CMD_INTERACTIVE% scripts\tune_threshold.py
     if errorlevel 1 (
         echo [ERROR] Threshold tuning failed.
         pause
@@ -106,7 +127,7 @@ if /I "%~1"=="tune-threshold" (
 
 :: 4. Create the local authentication database and launch the app.
 echo [INFO] Initializing authentication database...
-call "%CONDA_CMD%" run --no-capture-output -n "%ENV_NAME%" python core\auth.py
+call %RUN_CMD_INTERACTIVE% core\auth.py
 if errorlevel 1 (
     echo [ERROR] Authentication database initialization failed.
     pause
@@ -118,7 +139,7 @@ echo [INFO] Browser: %APP_URL%
 echo [INFO] Press Ctrl+C to stop the server.
 start "" "%APP_URL%"
 
-call "%CONDA_CMD%" run --no-capture-output -n "%ENV_NAME%" python -m uvicorn app:app --host 127.0.0.1 --port 8000
+call %RUN_CMD_INTERACTIVE% -m uvicorn app:app --host 127.0.0.1 --port 8000
 if errorlevel 1 (
     echo.
     echo [ERROR] Server failed to start. Port 8000 may already be in use.
