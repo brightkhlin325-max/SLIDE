@@ -2,15 +2,68 @@
 // dashboard.js — EDIS 儀表板頁面渲染與問答看板邏輯
 // ==========================================
 
+// LIME 因子的「來源」小標：True=本訂單實際值；False=模型整體性因子（資料無逐筆數值）
+function factorScopeTag(f) {
+  return f && f.order_specific
+    ? '<span style="font-size:10px;background:#e0f2fe;color:#0369a1;border-radius:8px;padding:1px 6px;margin-left:6px;">本訂單實際值</span>'
+    : '<span style="font-size:10px;background:#f1f5f9;color:#64748b;border-radius:8px;padding:1px 6px;margin-left:6px;">模型整體因子</span>';
+}
+
+// ── 月份 flipper（問答看板）：'' = 全部月份，置於清單最前 ───────────────────────
+function currentFlipperMonth() {
+  const list = window.edisState.monthList;
+  return list ? (list[window.edisState.monthIdx || 0] || '') : '';
+}
+
+function syncMonthFlipper(months) {
+  if (!Array.isArray(months)) return;
+  const desired = [''].concat(months);
+  const existing = window.edisState.monthList;
+  // 僅在清單尚未建立或長度變動時重建，避免每次載入都重置使用者選擇
+  if (!existing || existing.length !== desired.length) {
+    window.edisState.monthList = desired;
+    if ((window.edisState.monthIdx || 0) >= desired.length) window.edisState.monthIdx = 0;
+    updateMonthFlipperLabel();
+  }
+}
+
+function updateMonthFlipperLabel() {
+  const label = document.getElementById('monthFlipperLabel');
+  if (label) label.textContent = currentFlipperMonth() || '全部月份';
+}
+
+function flipMonth(delta) {
+  const list = window.edisState.monthList;
+  if (!list || list.length === 0) return;
+  let idx = (window.edisState.monthIdx || 0) + delta;
+  idx = Math.max(0, Math.min(list.length - 1, idx));  // 邊界夾擠，無溢位、無遞迴
+  if (idx === (window.edisState.monthIdx || 0)) return;
+  window.edisState.monthIdx = idx;
+  updateMonthFlipperLabel();
+  window.edisState.currentPage = 1;
+  reloadBossBoard();
+}
+window.flipMonth = flipMonth;
+
+// 依目前 flipper 月份重新載入老闆直觀問答看板（緊急度排序由後端負責）
+async function reloadBossBoard() {
+  const p = await fetchPredictions(window.edisState.currentPage || 1, '', '', '', '', currentFlipperMonth());
+  if (!p) return;
+  syncMonthFlipper(p.available_months);
+  window.edisState.totalPredictionsCount = p.count || 0;
+  renderBossTable(p.data || []);
+}
+
 async function refreshDashboard() {
   try {
     const [p, executive, scenarios, tuning] = await Promise.all([
-      fetchPredictions(window.edisState.currentPage),
+      fetchPredictions(window.edisState.currentPage, '', '', '', '', currentFlipperMonth()),
       fetchExecutiveSummary(),
       fetchScenarioAnalysis(),
       fetchThresholdTuning().catch(() => null)
     ]);
     if (p) {
+      syncMonthFlipper(p.available_months);
       window.edisState.totalPredictionsCount = p.count || 0;
       renderBossTable(p.data || []);
       const m = await fetchMetrics();
@@ -205,7 +258,7 @@ async function toggleRowExplanation(orderId) {
         const factors = data.top_x_factors || [];
         const factorsHtml = factors.map(f => `
           <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:12px; border-bottom:1px dashed #dde0de; padding-bottom:4px;">
-            <span><strong>${f.label || f.feature}</strong>: <span style="color:var(--muted);">${f.evidence}</span></span>
+            <span><strong>${f.label || f.feature}</strong>${factorScopeTag(f)}: <span style="color:var(--muted);">${f.evidence}</span></span>
             <span style="font-weight:600; color:${f.impact === 'raises risk' ? '#c0392b' : '#27ae60'}">${f.impact === 'raises risk' ? '▲ 增加延遲風險' : '▼ 正常/次要'}</span>
           </div>
         `).join('');
