@@ -38,12 +38,14 @@ if exist ".venv\Scripts\python.exe" (
     echo [INFO] Local Python virtual environment venv detected.
 ) else (
     set "CONDA_CMD="
-    where conda.exe >nul 2>nul
-    if %errorlevel% equ 0 set "CONDA_CMD=conda.exe"
-    if not defined CONDA_CMD if exist "%USERPROFILE%\anaconda3\condabin\conda.bat" set "CONDA_CMD=%USERPROFILE%\anaconda3\condabin\conda.bat"
+    if exist "%USERPROFILE%\anaconda3\condabin\conda.bat" set "CONDA_CMD=%USERPROFILE%\anaconda3\condabin\conda.bat"
     if not defined CONDA_CMD if exist "%USERPROFILE%\miniconda3\condabin\conda.bat" set "CONDA_CMD=%USERPROFILE%\miniconda3\condabin\conda.bat"
     if not defined CONDA_CMD if exist "C:\ProgramData\anaconda3\condabin\conda.bat" set "CONDA_CMD=C:\ProgramData\anaconda3\condabin\conda.bat"
     if not defined CONDA_CMD if exist "C:\ProgramData\miniconda3\condabin\conda.bat" set "CONDA_CMD=C:\ProgramData\miniconda3\condabin\conda.bat"
+    if not defined CONDA_CMD (
+        where conda.exe >nul 2>nul
+        if not errorlevel 1 set "CONDA_CMD=conda.exe"
+    )
 )
 
 if %USE_VENV% equ 0 (

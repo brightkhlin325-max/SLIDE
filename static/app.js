@@ -394,6 +394,18 @@ function closeLoginModal() {
     b.classList.toggle('active', b.textContent.toLowerCase() === activeRole));
 }
 
+function toggleLoginPassword() {
+  const input = document.getElementById('loginPassword');
+  const icon = document.getElementById('loginPasswordToggleIcon');
+  if (input.type === 'password') {
+    input.type = 'text';
+    icon.src = '/static/eye-slash-solid.svg';
+  } else {
+    input.type = 'password';
+    icon.src = '/static/eye-solid.svg';
+  }
+}
+
 async function submitLogin() {
   const username = document.getElementById('loginUsername').value.trim();
   const password = document.getElementById('loginPassword').value;
