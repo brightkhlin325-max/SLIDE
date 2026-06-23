@@ -44,10 +44,10 @@
       <i class="nav-icon">◆</i> 區域風險地圖
     </a>
     <a class="nav-item" id="nav-rbac" onclick="showPage('rbac')">
-      <i class="nav-icon">○</i> RBAC 權限矩陣
+      <i class="nav-icon">○</i> 權限管理
     </a>
     <a class="nav-item" id="nav-llm-settings" onclick="showPage('llm-settings')">
-      <i class="nav-icon">🤖</i> LLM 設定
+      <i class="nav-icon">🤖</i> 模型設定
     </a>
   </nav>
 
@@ -110,7 +110,7 @@
 <div id="explainModal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.6); z-index:999; display:none; align-items:center; justify-content:center; padding:20px;">
   <div style="background:white; border-radius:16px; width:100%; max-width:540px; padding:28px; display:flex; flex-direction:column; gap:16px; position:relative; box-shadow:0 20px 25px -5px rgba(0,0,0,0.15);">
     <button onclick="closeExplainModal()" style="position:absolute; top:16px; right:20px; border:none; background:transparent; font-size:24px; cursor:pointer; color:var(--muted);">&times;</button>
-    <div style="font-size:16px; font-weight:700;">🔎 訂單延遲歸因 analysis 與對策 (LIME-style)</div>
+    <div style="font-size:16px; font-weight:700;">🔎 延遲原因分析</div>
     <div style="font-size:11px; color:var(--muted); font-family:monospace; margin-top:-8px;" id="modalOrderId">—</div>
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
       <div class="stat-box" style="background:var(--slate-lt); padding:10px; border-radius:8px;">
@@ -127,7 +127,7 @@
       <div id="modalSummaryText" style="font-size:13px; line-height:1.6; padding:12px; background:var(--slate-lt); border-radius:8px;">—</div>
     </div>
     <div>
-      <div style="font-size:11px; color:var(--muted); font-weight:600; text-transform:uppercase; margin-bottom:4px; font-family:monospace;">影響特徵因子影響比重</div>
+      <div style="font-size:11px; color:var(--muted); font-weight:600; text-transform:uppercase; margin-bottom:4px; font-family:monospace;">關鍵因素排名</div>
       <div id="modalFactorsList" style="display:flex; flex-direction:column; gap:8px; max-height:160px; overflow-y:auto;"></div>
     </div>
   </div>
@@ -135,8 +135,8 @@
 
 <div class="modal-overlay" id="loginModal">
   <div class="modal-box">
-    <div class="modal-title">🔐 Manager 登入安全驗證</div>
-    <div class="modal-sub">請輸入主管憑證帳密以變更系統參數</div>
+    <div class="modal-title">🔐 主管登入</div>
+    <div class="modal-sub">請輸入帳密以變更系統配置</div>
     <div class="modal-field">
       <label class="field-label">帳號 Username</label>
       <input type="text" class="modal-input" id="loginUsername" placeholder="admin">
@@ -157,11 +157,10 @@
 <div id="monthDiagnoseModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,0.6);z-index:1000;align-items:center;justify-content:center;padding:20px;">
   <div style="background:white;border-radius:16px;width:100%;max-width:520px;padding:28px;box-shadow:0 20px 25px -5px rgba(0,0,0,0.15);position:relative;max-height:90vh;overflow-y:auto;">
     <button onclick="closeDiagnoseModal()" style="position:absolute;top:14px;right:18px;border:none;background:transparent;font-size:24px;cursor:pointer;color:var(--muted);">&times;</button>
-    <div style="font-size:16px;font-weight:700;margin-bottom:4px;">🔎 <span id="diagMonthTitle">—</span> 月份預測誤差診斷與重訓</div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:4px;">🔎 <span id="diagMonthTitle">—</span> 月份預測誤差診斷</div>
     <div id="diagMonthSummary" style="font-size:12px;color:var(--muted);font-family:monospace;margin-bottom:16px;">—</div>
-
     <div style="margin-bottom:16px;">
-      <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;margin-bottom:8px;font-family:monospace;">主要誤差特徵（LIME 聚合分析）</div>
+      <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;margin-bottom:8px;font-family:monospace;">預測偏誤因素</div>
       <div id="diagFactors" style="display:flex;flex-direction:column;gap:8px;"></div>
     </div>
 
@@ -177,7 +176,7 @@
       <input type="text" id="diagEventNote" placeholder="備註事件描述（選填）" class="budget-input" style="margin-bottom:12px;">
       <div id="diagManagerActions" style="display:flex;flex-direction:column;gap:8px;">
         <button onclick="flagMonthEvent()" id="diagFlagBtn" class="run-btn" style="background:#fff7ed; border:1px solid #fed7aa; color:#c2410c;">標記為外部事件並排除重訓</button>
-        <button onclick="showRetrainStep()" id="diagRetrainBtn" class="run-btn">確認為模型偏誤 → 啟動模型重訓</button>
+        <button onclick="showRetrainStep()" id="diagRetrainBtn" class="run-btn">啟動模型重訓</button>
       </div>
       <div id="diagViewerNote" style="display:none;text-align:center;font-size:12px;color:var(--muted);padding:8px;background:var(--slate-lt);border-radius:8px;">🔒 需 Manager 權限執行診斷重訓標記</div>
     </div>
@@ -190,26 +189,26 @@
       </div>
       <div id="diagFeatureCheckboxes" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;"></div>
       <button onclick="startRetrain()" id="diagStartRetrainBtn" class="run-btn" style="background:var(--success);">▶ 開始非同步重訓</button>
-      <div id="diagRetrainStatus" style="display:none;text-align:center;padding:12px;font-size:13px;color:var(--muted);">正在進行背景特徵重構訓練，請稍候...</div>
+      <div id="diagRetrainStatus" style="display:none;text-align:center;padding:12px;font-size:13px;color:var(--muted);">模型重訓中，請稍候...</div>
     </div>
 
     <!-- Step 3 重訓結果對比 -->
     <div id="diagStep3" style="display:none;border-top:1px solid var(--border);padding-top:14px;">
-      <div style="font-size:13px;font-weight:600;margin-bottom:12px;">重訓模型對比指標</div>
+      <div style="font-size:13px;font-weight:600;margin-bottom:12px;">新舊預測指標對比</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:12px;">
         <div>
-          <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:4px;">舊模型指標</div>
+          <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:4px;">原版指標</div>
           <div id="diagOldMetricsGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:4px;"></div>
         </div>
         <div>
-          <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:4px;">新模型指標</div>
+          <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:4px;">新版指標</div>
           <div id="diagNewMetricsGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:4px;"></div>
         </div>
       </div>
       <div id="diagDroppedColsNote" style="font-size:10px;color:var(--muted);padding:6px;background:var(--slate-lt);border-radius:4px;margin-bottom:12px;font-family:monospace;"></div>
       <div style="display:flex;gap:10px;">
-        <button onclick="diagAdoptNewModel()" id="diagAdoptBtn" class="run-btn" style="background:var(--success);">✓ 採用新模型</button>
-        <button onclick="diagDiscardNewModel()" id="diagDiscardBtn" class="run-btn" style="background:var(--slate-lt); color:var(--text); border:1px solid var(--border)">\u2717 捨棄</button>
+        <button onclick="diagAdoptNewModel()" id="diagAdoptBtn" class="run-btn" style="background:var(--success);">✓ 採用新版</button>
+        <button onclick="diagDiscardNewModel()" id="diagDiscardBtn" class="run-btn" style="background:var(--slate-lt); color:var(--text); border:1px solid var(--border)">✗ 捨棄新版</button>
       </div>
     </div>
   </div>

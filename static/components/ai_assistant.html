@@ -1,18 +1,18 @@
 <div class="page-header">
-  <h1 class="page-title">AI 物流策略決策助理</h1>
-  <div class="page-sub">由大語言模型驅動的白話決策分析中心</div>
+  <h1 class="page-title">AI 物流決策助理</h1>
+  <div class="page-sub">智慧決策與策略分析中心</div>
 </div>
 <div class="ai-chat-shell">
   <div class="ai-chat-log" id="aiChatLog">
     <div class="ai-message assistant">
-      您好，我是您的 EDIS 專屬 AI 物流顧問。您可以隨時詢問我關於「目前高風險訂單的分布原因」、「如何合理配置物流預算」、或上傳待預測訂單 CSV 進行大數據分析。
+      您好，我是您的 EDIS 專屬決策顧問。您可以隨時詢問我關於「目前高風險訂單的分布原因」、「如何合理配置物流預算」、或上傳待預測訂單 CSV 進行數據分析。
     </div>
     <div class="ai-message system" id="aiUploadStatus">目前使用系統預設驗證資料。</div>
   </div>
 
   <div class="ai-composer-wrap">
     <div class="ai-composer">
-      <textarea id="aiQuestionInput" rows="2" placeholder="向 AI 詢問決策建議...（例如：請幫我分析目前最容易延遲的地區與特徵）"></textarea>
+      <textarea id="aiQuestionInput" rows="2" placeholder="請輸入提問...（例如：請幫我分析目前最容易延遲的地區與原因）"></textarea>
       <div class="ai-composer-actions">
         <div style="display:flex; align-items:center; gap:8px;">
           <input type="file" id="aiPredictCsvInput" accept=".csv" style="display:none;" onchange="uploadPredictionCSV(this)">

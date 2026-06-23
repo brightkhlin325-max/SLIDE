@@ -86,6 +86,15 @@ function showPage(pageId) {
   const activeNav = document.getElementById(`nav-${pageId}`);
   if (activeNav) activeNav.classList.add('active');
 
+  // 同步更新頂部標題（排除前綴 Icon）
+  const titleDisplay = document.getElementById('pageTitleDisplay');
+  if (titleDisplay && activeNav) {
+    const rawText = activeNav.textContent.trim();
+    // 移除前綴非中文字元/表情符號
+    const cleanText = rawText.replace(/^[^\u4e00-\u9fa5\w]+/, '').trim();
+    titleDisplay.textContent = cleanText;
+  }
+
   // 切換頁面區塊可見度
   document.querySelectorAll('.page-section').forEach(el => {
     el.classList.add('hidden');

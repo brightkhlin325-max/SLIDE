@@ -1865,11 +1865,11 @@ def get_executive_summary(
         return grouped.rename(columns={column: "label"}).to_dict(orient="records")
 
     if at_risk_rate >= 0.35:
-        action = "立即啟動升級調度；高風險訂單比例偏高，需優先保護 SLA 與客戶承諾。"
+        action = "建議優先優化高風險訂單。"
     elif positive_roi_orders > 0:
-        action = "選擇性升級 ROI 為正的高風險訂單，並每日追蹤區域與運送模式異常。"
+        action = "建議優化推薦升級訂單。"
     else:
-        action = "維持原配送策略，將高風險訂單列入監控清單。"
+        action = "建議維持原配送策略。"
 
     return {
         "total_orders": total_orders,
@@ -1884,7 +1884,7 @@ def get_executive_summary(
         "recommended_action": action,
         "top_regions": top_breakdown("order_region"),
         "top_shipping_modes": top_breakdown("shipping_mode"),
-        "data_quality_note": "以目前 predictions.csv 計算；實務上應每日更新並與真實到貨結果回寫比對。",
+        "data_quality_note": "（數據每日更新核對）",
     }
 
 

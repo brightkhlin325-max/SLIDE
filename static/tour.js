@@ -1,13 +1,13 @@
 const _TOUR = [
-  { center:true,  icon:'🚀', title:'歡迎使用 EDIS',     desc:'這是一套物流延遲預測與最佳化調度系統。\n只需 1 分鐘，帶你快速認識各功能。' },
-  { target:'nav-dashboard',    icon:'📊', title:'Dashboard 總覽',  desc:'查看模型 KPI、延遲風險指標與趨勢，\n快速掌握整體物流狀況。' },
-  { target:'nav-optimization', icon:'⚡', title:'最佳化調度',      desc:'設定預算，系統自動找出 ROI 最佳的升級方案，\n降低延遲罰款。' },
-  { target:'nav-risk-list',    icon:'⚠️', title:'風險訂單列表',    desc:'瀏覽高風險訂單，支援搜尋與篩選，\n點擊訂單可查看延遲原因分析。（需 Manager/Engineer 權限）' },
-  { target:'nav-ai-assistant', icon:'✦',  title:'AI 助理',         desc:'用中文詢問物流決策建議，\nAI 根據去識別化資料回答。（需 Manager/Engineer 權限）' },
-  { target:'nav-model-perf',   icon:'⚙',  title:'模型診斷與重訓',   desc:'監控 AUC、F1、Precision、Recall，並可進行手動/排除特徵重訓。（需 Engineer 權限）' },
-  { target:'nav-region-map',   icon:'🗺️', title:'區域風險地圖',    desc:'全球熱力圖顯示各地區延遲風險，\n快速識別高風險配送區域。（需 Engineer 權限）' },
-  { target:'nav-rbac',         icon:'🔐', title:'角色與權限',      desc:'展示系統基於角色的 API 安全防禦架獲。（需 Engineer 權限）' },
-  { target:'nav-llm-settings', icon:'⚙',  title:'LLM 設定',        desc:'加密儲存底層 LLM 模組之連線參數與金鑰。（需 Engineer 權限）' }
+  { center:true,  icon:'🚀', title:'歡迎使用 EDIS',     desc:'這是一套物流延遲預估與優化調度系統。\n只需 1 分鐘，帶你快速認識各功能。' },
+  { target:'nav-dashboard',    icon:'📊', title:'Dashboard 總覽',  desc:'查看關鍵預估指標與延遲趨勢，\n快速掌握整體物流狀況。' },
+  { target:'nav-optimization', icon:'⚡', title:'最佳化調度',      desc:'設定預算，系統自動找出效益最佳的升級方案，\n降低延遲損失。' },
+  { target:'nav-risk-list',    icon:'⚠️', title:'風險訂單管理',    desc:'瀏覽高風險訂單，支援搜尋與篩選，\n點擊訂單可查看延遲原因分析。（需主管與工程師權限）' },
+  { target:'nav-ai-assistant', icon:'✦',  title:'AI 決策助理',      desc:'輸入查詢尋求物流對策，\n系統根據去識別化資料生成分析。（需主管與工程師權限）' },
+  { target:'nav-model-perf',   icon:'⚙',  title:'模型診斷與重訓',   desc:'監控各項預估指標，並可啟動模型重訓校準。（需工程師權限）' },
+  { target:'nav-region-map',   icon:'🗺️', title:'區域風險地圖',    desc:'全球熱力圖顯示各地區延遲風險，\n快速識別高風險配送區域。（需工程師權限）' },
+  { target:'nav-rbac',         icon:'🔐', title:'權限管理',        desc:'展示系統不同角色的功能操作與存取限制。（需工程師權限）' },
+  { target:'nav-llm-settings', icon:'⚙',  title:'模型設定',        desc:'安全儲存模型連線參數與金鑰。（需工程師權限）' }
 ];
 
 let _tourStep = 0;

@@ -1,6 +1,6 @@
 <div class="page-header">
   <h1 class="page-title">物流延遲預警看板</h1>
-  <div class="page-sub">XGBoost 機器學習預測引擎 · 當前系統門檻：<strong style="color:var(--primary)" id="thresholdValDisplay">0.50</strong></div>
+  <div class="page-sub">延遲預測系統 · 當前系統門檻：<strong style="color:var(--primary)" id="thresholdValDisplay">0.50</strong></div>
   <div id="sopRoleBadge" style="margin-top: 8px;"></div>
 </div>
 
@@ -9,7 +9,7 @@
   <div style="display:flex; align-items:center; gap:14px;">
     <span style="font-size:26px;">💡</span>
     <div>
-      <div style="font-size:14px; font-weight:700;">高階經理人決策建議 (Actionable Insight)</div>
+      <div style="font-size:14px; font-weight:700;">調度建議</div>
       <div id="actionableInsightsText" style="font-size:13px; opacity:0.9; margin-top:2px;">正在分析目前的訂單調度效益...</div>
     </div>
   </div>
@@ -49,7 +49,7 @@
   <div class="kpi-card" style="padding: 20px;">
     <div class="kpi-icon-wrap icon-green" style="width: 48px; height: 48px; font-size: 20px;">📊</div>
     <div class="kpi-info">
-      <div class="kpi-label" style="font-size:12px;">主要風險特徵</div>
+      <div class="kpi-label" style="font-size:12px;">關鍵延遲原因</div>
       <div class="kpi-value" style="font-size:18px; font-weight:700; margin-top:2px;" id="execDriver">—</div>
       <div class="kpi-label" id="execDriverNote" style="margin-top:4px; font-size:10px;">—</div>
     </div>
@@ -64,7 +64,7 @@
 <div class="panel">
   <div class="panel-head">
     <div>
-      <div class="panel-title">👑 老闆直觀問答看板</div>
+      <div class="panel-title">👑 延遲訂單與對策</div>
       <div class="panel-subtitle">回答「哪些會延遲？」、「原因為何？」及「如何進行防範動作？」</div>
     </div>
     <div style="display:flex; align-items:center; gap:10px;">
@@ -85,7 +85,7 @@
           <th>運送模式</th>
           <th>目的地區域</th>
           <th>延遲機率</th>
-          <th>可能導致延遲的主要因子</th>
+          <th>主要延遲原因</th>
           <th>決策動作與模擬</th>
         </tr>
       </thead>

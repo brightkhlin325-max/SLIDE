@@ -180,22 +180,22 @@ function renderExecutiveSummary(d) {
   const slaRiskEl = document.getElementById('execSlaRisk');
   if (slaRiskEl) slaRiskEl.textContent = `${serviceLevel}%`;
   const slaRiskNoteEl = document.getElementById('execSlaRiskNote');
-  if (slaRiskNoteEl) slaRiskNoteEl.textContent = `目標 90%，目前 ${d.at_risk_orders.toLocaleString()} 筆訂單高於風險門檻。`;
+  if (slaRiskNoteEl) slaRiskNoteEl.textContent = `目標 90%，目前 ${d.at_risk_orders.toLocaleString()} 筆高於預警門檻。`;
   
   const exposureEl = document.getElementById('execExposure');
   if (exposureEl) exposureEl.textContent = '$' + Math.round(d.expected_penalty_exposure || 0).toLocaleString();
   const exposureNoteEl = document.getElementById('execExposureNote');
-  if (exposureNoteEl) exposureNoteEl.textContent = `約 ${atRiskRate}% 訂單可能影響準時交付。`;
+  if (exposureNoteEl) exposureNoteEl.textContent = `約 ${atRiskRate}% 訂單可能延遲。`;
   
   const budgetEl = document.getElementById('execBudget');
   if (budgetEl) budgetEl.textContent = '$' + Math.round(d.recommended_budget || 0).toLocaleString();
   const budgetNoteEl = document.getElementById('execBudgetNote');
-  if (budgetNoteEl) budgetNoteEl.textContent = `${d.positive_roi_orders.toLocaleString()} 筆高風險訂單升級後有正淨效益。`;
+  if (budgetNoteEl) budgetNoteEl.textContent = `建議升級 ${d.positive_roi_orders.toLocaleString()} 筆訂單。`;
   
   document.getElementById('execDriver').textContent = topRegion ? topRegion.label : (topMode ? topMode.label : '—');
   document.getElementById('execDriverNote').textContent = topRegion && topMode
-    ? `${topRegion.label} 與 ${topMode.label} 是目前最主要的風險來源。`
-    : '目前沒有明顯集中的區域或運送模式風險。';
+    ? `${topRegion.label} 與 ${topMode.label} 是目前最主要的延遲原因。`
+    : '目前沒有明顯集中的延遲因素。';
 
   document.getElementById('execActionText').textContent = `${d.recommended_action} ${d.data_quality_note || ''}`;
 }
