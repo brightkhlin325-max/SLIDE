@@ -5,6 +5,7 @@ setlocal EnableExtensions
 cd /d "%~dp0"
 chcp 65001 >nul
 set "PYTHONIOENCODING=utf-8"
+set "PYTHONUTF8=1"
 
 :: LLM backend configuration template.
 :: Manager UI settings are preferred and persist encrypted in data\processed\llm_runtime_config.json.

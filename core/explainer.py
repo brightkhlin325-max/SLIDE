@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Explanation layer for EDIS manager-facing logistics recommendations.
 
