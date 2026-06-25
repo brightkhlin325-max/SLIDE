@@ -2,6 +2,34 @@
   .roi-select{padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:white;font-size:12px;color:var(--text);cursor:pointer;font-family:inherit;}
   .roi-info{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:var(--slate-lt);color:var(--muted);font-size:10px;cursor:pointer;margin-left:3px;font-style:normal;}
   .roi-info:hover{background:var(--primary);color:white;}
+
+  /* ROI KPI 卡片：直向排列（label → value → foot），無 icon */
+  #roiKpiRow .kpi-card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 18px 16px;
+  }
+  #roiKpiRow .kpi-label {
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: 600;
+    line-height: 1.3;
+    margin-bottom: 2px;
+  }
+  #roiKpiRow .kpi-value {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--text);
+    line-height: 1.15;
+    word-break: break-all;
+  }
+  #roiKpiRow .kpi-foot {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
 </style>
 <div class="page-header">
   <h1 class="page-title">最佳化ROI模擬器 (ROI Simulator)</h1>

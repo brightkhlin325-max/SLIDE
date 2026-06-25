@@ -6,8 +6,16 @@
 let _roiScatterChart = null;
 let _roiLoaded = false;
 
-const _fmtMoney = (v) => (v < 0 ? '-$' : '$') + Math.abs(Math.round(v)).toLocaleString();
-const _fmtPct = (v) => (v * 100).toFixed(1) + '%';
+const _fmtMoney = (v) => {
+  const n = parseFloat(v);
+  if (v == null || isNaN(n)) return '—';
+  return (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
+};
+const _fmtPct = (v) => {
+  const n = parseFloat(v);
+  if (v == null || isNaN(n)) return '—';
+  return (n * 100).toFixed(1) + '%';
+};
 
 const ROI_INFO = {
   penalty: ['SLA 延遲罰金', '每筆訂單延遲時估計付出的代價（退費/賠償/商譽）。調整它會即時重算「真價值」與相關 KPI。預設 $250，對齊最佳化調度。'],
