@@ -230,6 +230,11 @@ def test_profit_metrics_manager_access():
     assert response.status_code == 200
     data = response.json()
     assert "is_trained" in data
+    assert data["metrics"]["feature_count"] == 33
+    assert data["manifest"]["feature_count"] == 33
+    assert data["manifest"]["model_feature_count"] == 33
+    assert data["metrics"].get("metric_file_feature_count") == 33
+    assert data["metrics"].get("metric_file_status") is None
 
 
 def test_profit_metrics_viewer_access():
@@ -242,6 +247,19 @@ def test_profit_metrics_viewer_access():
     assert "is_trained" in data
 
 
+def test_profit_feature_importance_uses_current_model_contract():
+    response = client.get("/api/profit/feature-importance?limit=50")
+    assert response.status_code == 200, response.text
+    data = response.json()
+    features = {row["feature"] for row in data["data"]}
+
+    assert data["feature_count"] == 33
+    assert "Days for shipping (real)" not in features
+    assert "Late_delivery_risk" not in features
+    assert "Delivery Status" not in features
+    assert "Order Status" not in features
+
+
 def test_profit_leakage_audit_uses_deployed_feature_contract():
     """守門應檢查部署模型契約，不能被舊版 processed schema 誤判為 FAIL。"""
     response = client.get("/api/profit/leakage-audit")
@@ -252,13 +270,13 @@ def test_profit_leakage_audit_uses_deployed_feature_contract():
     assert data["leaked_in_features"] == []
     assert data["feature_count"] == 33
     assert data["serving_contract"]["contract_errors"] == []
-    assert data["serving_contract"]["legacy_schema_status"] == "stale"
-    assert set(data["serving_contract"]["legacy_schema_blocked"]) == {
-        "Days for shipping (real)",
-        "Delivery Status",
-        "Order Status",
-        "Late_delivery_risk",
-    }
+    assert data["serving_contract"]["active_feature_count"] == 33
+    assert data["serving_contract"]["model_feature_count"] == 33
+    assert data["serving_contract"]["legacy_schema_feature_count"] == 33
+    assert data["serving_contract"]["legacy_schema_ignored"] is False
+    assert data["serving_contract"]["legacy_schema_status"] == "compatible"
+    assert data["serving_contract"]["legacy_schema_blocked"] == []
+    assert "不是收益模型訓練特徵" in data["column_labeling"]["p_late / late_pred"]
 
 
 def test_profit_single_prediction_uses_serving_feature_contract():
@@ -485,11 +503,11 @@ def test_all_simulation_entrypoints_use_shared_handoff():
     dashboard = (root / "dashboard.js").read_text(encoding="utf-8")
     simulator = (root / "simulator.js").read_text(encoding="utf-8")
 
-    assert "window.openOrderSimulation(shippingMode, orderRegion, days, price, qty, segment, market, orderDate)" in dashboard
+    assert "window.openOrderSimulation(order)" in dashboard
     assert "window.openDashboardSimulator = openDashboardSimulator" in dashboard
     assert "function openOrderSimulation(" in simulator
     assert "window.openOrderSimulation = openOrderSimulation" in simulator
-    assert "setSimulatorSelectValue('pf-order-region', orderRegion)" in simulator
+    assert "setSimulatorSelectValue('pf-order-region', order.order_region || order.orderRegion || 'Western Europe')" in simulator
 
 
 def test_known_results_upload_requires_delay_and_profit_outcomes():

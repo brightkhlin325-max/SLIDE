@@ -283,10 +283,10 @@ class ManagerExplainer:
     ) -> str:
         factor_text = "、".join(f"{f.label}（{f.evidence}）" for f in factors)
         return (
-            f"此訂單延遲風險為 {risk_bucket}（p_late={p_late:.0%}），"
+            f"此訂單延遲風險為 {risk_bucket.upper()}（p_late={p_late:.1%}），"
             f"目前運送模式為 {shipping_mode}，目的地為 {order_region or 'Unknown'}。"
-            f"若升級運送，預期可避免罰款 USD ${expected_penalty:,.0f}，"
-            f"扣除升級成本 USD ${upgrade_cost:,.0f} 後，淨效益約 USD ${net_benefit:,.0f}。"
+            f"若升級運送，原罰款 USD ${expected_penalty:,.0f}，"
+            f"扣除升級成本 USD ${upgrade_cost:,.0f} 後，可省下 USD ${net_benefit:,.0f}的懲罰成本(淨效益)。"
             f"可能導致延遲的主要因子為：{factor_text}。建議：{action}。"
         )
 

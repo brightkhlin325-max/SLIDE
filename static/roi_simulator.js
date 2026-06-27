@@ -7,6 +7,68 @@ let _roiScatterChart = null;
 let _roiLoaded = false;
 let _roiViewMode = 'scatter';
 let _roiAtRiskPage = 1;
+const ROI_COMPONENT_VERSION = 'roi-kpi-vertical-v2';
+
+function normalizeRoiKpiCards() {
+  const row = document.getElementById('roiKpiRow');
+  if (!row) return;
+
+  if (!document.getElementById('roiKpiRuntimeStyle')) {
+    const style = document.createElement('style');
+    style.id = 'roiKpiRuntimeStyle';
+    style.textContent = `
+      #roiKpiRow {
+        display: grid !important;
+        grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+        gap: 14px !important;
+        margin-bottom: 18px !important;
+      }
+      #roiKpiRow > .kpi-card,
+      #roiKpiRow > .roi-kpi-card {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        justify-content: center !important;
+        gap: 0 !important;
+        min-height: 142px !important;
+        padding: 28px 30px !important;
+      }
+      #roiKpiRow .kpi-icon-wrap { display: none !important; }
+      #roiKpiRow .kpi-info,
+      #roiKpiRow .roi-kpi-info { width: 100% !important; min-width: 0 !important; }
+      #roiKpiRow .kpi-label,
+      #roiKpiRow .roi-kpi-label {
+        display: block !important;
+        margin: 0 0 8px 0 !important;
+        line-height: 1.35 !important;
+        font-size: 12px !important;
+        color: var(--muted) !important;
+      }
+      #roiKpiRow .kpi-value,
+      #roiKpiRow .roi-kpi-value {
+        display: block !important;
+        width: 100% !important;
+        margin: 0 !important;
+        font-size: clamp(22px, 1.9vw, 28px) !important;
+        line-height: 1.05 !important;
+        white-space: nowrap !important;
+      }
+      #roiKpiRow .kpi-foot,
+      #roiKpiRow .roi-kpi-foot {
+        display: block !important;
+        margin-top: 8px !important;
+        font-size: 11px !important;
+        line-height: 1.4 !important;
+        color: var(--muted) !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  row.querySelectorAll(':scope > .kpi-card').forEach(card => {
+    card.classList.add('roi-kpi-card');
+  });
+}
 
 function changeRoiViewMode(mode) {
   _roiViewMode = mode;
@@ -80,6 +142,7 @@ window.setRoiPenalty = setRoiPenalty;
 
 async function loadRoiSimulator() {
   // 項目2/6：ROI 最佳化求解與 What-if 前端已移除，相關呼叫停用（後端保留）。
+  normalizeRoiKpiCards();
   await loadRoiSummary();
   await loadRoiPortfolio();   // 也會在內部填客群/區域下拉
   loadRoiTrustMap();
@@ -89,19 +152,21 @@ async function loadRoiSimulator() {
 async function loadEmbeddedRoi() {
   const host = document.getElementById('optRoiAnalysis');
   if (!host) return;
-  if (!host.dataset.loaded) {
+  if (!host.dataset.loaded || host.dataset.roiVersion !== ROI_COMPONENT_VERSION || host.querySelector('#roiKpiRow > .kpi-card')) {
     try {
-      const r = await fetch('/static/components/roi_simulator.html');
+      const r = await fetch(`/static/components/roi_simulator.html?v=${ROI_COMPONENT_VERSION}`, { cache: 'no-store' });
       host.innerHTML = await r.text();
       // 移除內嵌 page-header（避免與最佳化調度頁標題重複）
       const hdr = host.querySelector('.page-header');
       if (hdr) hdr.remove();
       host.dataset.loaded = '1';
+      host.dataset.roiVersion = ROI_COMPONENT_VERSION;
     } catch (e) {
       host.innerHTML = `<div style="color:red;padding:20px;">ROI 分析載入失敗：${e.message}</div>`;
       return;
     }
   }
+  normalizeRoiKpiCards();
   loadRoiSimulator();
 }
 window.loadEmbeddedRoi = loadEmbeddedRoi;

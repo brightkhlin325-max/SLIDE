@@ -419,6 +419,10 @@ async function loadLeakageAudit() {
     if (tag) { tag.textContent = d.gate_status === 'PASS' ? '✓ PASS' : '✗ FAIL';
       tag.style.background = d.gate_status === 'PASS' ? 'var(--success)' : 'var(--danger)'; tag.style.color = 'white'; }
     const lbl = d.column_labeling || {};
+    const contract = d.serving_contract || {};
+    const legacyText = contract.legacy_schema_ignored
+      ? `舊 schema ${contract.legacy_schema_feature_count || 0} 欄已忽略`
+      : `舊 schema：${contract.legacy_schema_status || '—'}`;
     const body = document.getElementById('leakAuditBody');
     if (body) body.innerHTML = `
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
@@ -435,7 +439,9 @@ async function loadLeakageAudit() {
           <div style="font-size:12px;font-weight:700;margin-bottom:6px;">欄位標示 (actual / pred)</div>
           ${Object.entries(lbl).map(([k, v]) => `<div style="font-size:11px;line-height:1.7;padding:6px 8px;background:var(--slate-lt);border-radius:6px;margin-bottom:5px;"><b>${k}</b><br><span style="color:var(--muted);">${v}</span></div>`).join('')}
           <div style="font-size:11px;color:var(--muted);margin-top:8px;">特徵數：${d.feature_count}；洩漏入侵：${(d.leaked_in_features || []).length === 0 ? '無' : d.leaked_in_features.join('、')}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:4px;">部署契約：${d.serving_contract?.source || '—'}；舊 schema：${d.serving_contract?.legacy_schema_status || '—'}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;">部署契約：${contract.source || '—'}；部署特徵 ${contract.active_feature_count || d.feature_count || 0} 欄；模型檔 ${contract.model_feature_count || '—'} 欄</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;">${legacyText}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;">${contract.legacy_schema_note || ''}</div>
         </div>
       </div>`;
   } catch (e) { console.error('leakage audit', e); }

@@ -29,6 +29,57 @@
     background: var(--primary);
     color: white;
   }
+
+  .roi-kpi-row {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+
+  .roi-kpi-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+    min-height: 142px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 0;
+    padding: 28px 30px;
+  }
+
+  .roi-kpi-info {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .roi-kpi-label {
+    margin-bottom: 8px;
+    line-height: 1.35;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .roi-kpi-value {
+    width: 100%;
+    color: var(--text);
+    font-size: clamp(22px, 1.9vw, 28px);
+    font-weight: 700;
+    line-height: 1.05;
+    overflow-wrap: normal;
+    white-space: nowrap;
+    margin: 0;
+  }
+
+  .roi-kpi-foot {
+    margin-top: 8px;
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--muted);
+  }
 </style>
 <div class="page-header">
   <h1 class="page-title">最佳化ROI模擬器 (ROI Simulator)</h1>
@@ -57,33 +108,43 @@
 </div>
 
 <!-- A. KPI -->
-<div style="display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:14px; margin-bottom:18px;" id="roiKpiRow">
-  <div class="kpi-card">
-    <div class="kpi-label">帳載利潤 (Book Profit)</div>
-    <div class="kpi-value" id="roiBookProfit">--</div>
-    <div class="kpi-foot">帳面看起來賺的</div>
-  </div>
-  <div class="kpi-card">
-    <div class="kpi-label">真價值 (Net-of-Service) <span class="roi-info" onclick="openRoiInfo('nos')">ⓘ</span></div>
-    <div class="kpi-value" id="roiNetValue">--</div>
-    <div class="kpi-foot">扣掉延遲代價後</div>
-  </div>
-  <div class="kpi-card">
-    <div class="kpi-label">被服務侵蝕 (Erosion)</div>
-    <div class="kpi-value" id="roiErosion" style="color:var(--danger);">--</div>
-    <div class="kpi-foot">延遲吃掉的金額</div>
-  </div>
-  <div class="kpi-card">
-    <div class="kpi-label">假性賺錢比例 <span class="roi-info" onclick="openRoiInfo('fp')">ⓘ</span></div>
-    <div class="kpi-value" id="roiFpPct" style="color:var(--danger);">--</div>
-    <div class="kpi-foot">帳面賺/實際賠</div>
-  </div>
-  <div class="kpi-card">
-    <div class="kpi-label">預估風險暴露金額 (Margin at Risk) <span class="roi-info"
-        onclick="openRoiInfo('epar', '預估風險暴露金額 (Margin at Risk)', '利潤暴露在延遲機率下的風險值，即 EPAR = 帳載利潤 × 延遲機率。這代表若發生延遲，這筆利潤有多大的風險。數字越高代表越需要被救。')">ⓘ</span>
+<div class="roi-kpi-row" id="roiKpiRow">
+  <div class="roi-kpi-card">
+    <div class="roi-kpi-info">
+      <div class="roi-kpi-label">帳載利潤<br><span>Book Profit</span></div>
+      <div class="roi-kpi-value" id="roiBookProfit">--</div>
+      <div class="roi-kpi-foot">帳面看起來賺的</div>
     </div>
-    <div class="kpi-value" id="roiEpar">--</div>
-    <div class="kpi-foot">利潤×延遲機率</div>
+  </div>
+  <div class="roi-kpi-card">
+    <div class="roi-kpi-info">
+      <div class="roi-kpi-label">真價值<br><span>Net-of-Service</span> <span class="roi-info" onclick="openRoiInfo('nos')">ⓘ</span></div>
+      <div class="roi-kpi-value" id="roiNetValue">--</div>
+      <div class="roi-kpi-foot">扣掉延遲代價後</div>
+    </div>
+  </div>
+  <div class="roi-kpi-card">
+    <div class="roi-kpi-info">
+      <div class="roi-kpi-label">被服務侵蝕<br><span>Erosion</span></div>
+      <div class="roi-kpi-value" id="roiErosion" style="color:var(--danger);">--</div>
+      <div class="roi-kpi-foot">延遲吃掉的金額</div>
+    </div>
+  </div>
+  <div class="roi-kpi-card">
+    <div class="roi-kpi-info">
+      <div class="roi-kpi-label">假性賺錢比例<br><span>False Profit Rate</span> <span class="roi-info" onclick="openRoiInfo('fp')">ⓘ</span></div>
+      <div class="roi-kpi-value" id="roiFpPct" style="color:var(--danger);">--</div>
+      <div class="roi-kpi-foot">帳面賺 / 實際賠</div>
+    </div>
+  </div>
+  <div class="roi-kpi-card">
+    <div class="roi-kpi-info">
+      <div class="roi-kpi-label">預估風險暴露金額<br><span>Margin at Risk</span> <span class="roi-info"
+          onclick="openRoiInfo('epar', '預估風險暴露金額 (Margin at Risk)', '利潤暴露在延遲機率下的風險值，即 EPAR = 帳載利潤 × 延遲機率。這代表若發生延遲，這筆利潤有多大的風險。數字越高代表越需要被救。')">ⓘ</span>
+      </div>
+      <div class="roi-kpi-value" id="roiEpar">--</div>
+      <div class="roi-kpi-foot">利潤 × 延遲機率</div>
+    </div>
   </div>
 </div>
 

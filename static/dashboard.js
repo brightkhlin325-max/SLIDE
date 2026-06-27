@@ -74,9 +74,9 @@ async function openExplainModal(orderId) {
     if (!res.ok) throw new Error('分析資料讀取失敗');
     const data = await res.json();
 
-    document.getElementById('modalProb').textContent = (data.p_late * 100).toFixed(1) + '%';
+    document.getElementById('modalProb').textContent = pLateText(data.p_late);
     document.getElementById('modalPenalty').textContent = '$' + Math.round(data.expected_penalty).toLocaleString();
-    document.getElementById('modalSummaryText').textContent = data.manager_summary || '無摘要。';
+    document.getElementById('modalSummaryText').textContent = buildManagerSummary(data);
 
     const factors = data.top_x_factors || [];
     document.getElementById('modalFactorsList').innerHTML = factors.map(f => `
@@ -211,6 +211,44 @@ function pillClass(p) {
   return str === 'High' ? 'r-high' : str === 'Medium' ? 'r-med' : 'r-low';
 }
 
+function riskBucket(o) {
+  if (o.risk_bucket) return String(o.risk_bucket);
+  const p = Number(o.p_late || 0);
+  return p >= 0.7 ? 'High' : p >= 0.3 ? 'Medium' : 'Low';
+}
+
+function riskLabel(o) {
+  return riskBucket(o).toUpperCase();
+}
+
+function riskBadgeHtml(o, extraStyle = '') {
+  return `<span class="risk-pill risk-text-only ${pillClass(riskBucket(o))}" style="font-weight:700; ${extraStyle}">${riskLabel(o)}</span>`;
+}
+
+function pLateText(pLate) {
+  const p = Number(pLate || 0);
+  return `${(p * 100).toFixed(1)}%`;
+}
+
+function buildManagerSummary(data) {
+  const risk = String(data.risk_bucket || riskBucket(data)).toUpperCase();
+  const pLate = pLateText(data.p_late);
+  const penalty = Math.round(Number(data.expected_penalty || 0)).toLocaleString();
+  const cost = Math.round(Number(data.upgrade_cost || 0)).toLocaleString();
+  const net = Math.round(Number(data.net_benefit || 0)).toLocaleString();
+  const factors = (data.top_x_factors || [])
+    .slice(0, 4)
+    .map(f => `${f.label || f.feature}（${f.evidence || '模型指出此因子會影響延遲風險'}）`)
+    .join('、');
+  const action = data.recommended_action || '依延遲風險與淨效益決定是否升級。';
+  return (
+    `此訂單延遲風險為 ${risk}（p_late=${pLate}），` +
+    `若升級運送，原罰款 USD $${penalty}，` +
+    `扣除升級成本 USD $${cost} 後，可省下 USD $${net}的懲罰成本(淨效益)。` +
+    `可能導致延遲的主要因子為：${factors || '目前無明顯特徵影響'}。建議：${action}。`
+  );
+}
+
 function getReasonText(o) {
   const mode = o.shipping_mode || 'Unknown';
   const region = o.order_region || '未知區域';
@@ -234,10 +272,15 @@ function getReasonText(o) {
   return `風險訊號較分散，建議展開查看特徵影響`;
 }
 
-function openDashboardSimulator(shippingMode, orderRegion, days, price, qty, segment, market, orderDate) {
+function simulatorOrderPayload(order) {
+  return encodeURIComponent(JSON.stringify(order || {}));
+}
+
+function openDashboardSimulator(orderOrPayload) {
   if (window.edisState.currentRole === 'viewer') return;
   if (window.openOrderSimulation) {
-    window.openOrderSimulation(shippingMode, orderRegion, days, price, qty, segment, market, orderDate);
+    const order = typeof orderOrPayload === 'string' ? JSON.parse(decodeURIComponent(orderOrPayload)) : orderOrPayload;
+    window.openOrderSimulation(order);
   }
 }
 
@@ -255,10 +298,13 @@ function openRecommendedOptimization() {
 
 function getActionText(o) {
   const expected_saving = o.expected_penalty - o.upgrade_cost;
+  const actionText = o.p_late >= window.edisState.threshold && expected_saving > 0
+    ? '建議升級運送'
+    : '監控並維持原狀';
   if (o.p_late >= window.edisState.threshold && expected_saving > 0) {
-    return `<span class="risk-pill r-high" style="font-weight:600; cursor:pointer;" onclick="openExplainModal('${o.order_id_hash}')">💡 建議升級運送</span>`;
+    return `<span class="risk-pill r-high" style="font-weight:600; cursor:pointer;" onclick="openExplainModal('${o.order_id_hash}')">💡 ${actionText}</span>`;
   }
-  return `<span class="risk-pill r-low" style="font-weight:500; cursor:pointer;" onclick="openExplainModal('${o.order_id_hash}')">✔ 監控並維持原狀</span>`;
+  return `<span class="risk-pill r-low" style="font-weight:500; cursor:pointer;" onclick="openExplainModal('${o.order_id_hash}')">✔ ${actionText}</span>`;
 }
 
 function renderBossTable(data) {
@@ -277,14 +323,7 @@ function renderBossTable(data) {
   tbody.innerHTML = delayed.map(o => {
     const hash = o.order_id_hash;
     
-    const sm = o.shipping_mode || 'Standard Class';
-    const reg = o.order_region || 'Western Europe';
-    const days = o.days_for_shipment || 4;
-    const price = o.product_price || 59.99;
-    const qty = o.order_item_quantity || 1;
-    const segment = o.customer_segment || 'Consumer';
-    const market = o.market || 'Europe';
-    const date = o.order_date || '';
+    const simulatorPayload = simulatorOrderPayload(o);
     
     return `
       <tr>
@@ -296,8 +335,8 @@ function renderBossTable(data) {
         <td style="color:var(--muted)">${o.order_region || 'Unknown'}</td>
         <td>
           <div class="prob-wrap">
-            <div class="prob-bar"><div class="prob-fill ${fillClass(o.p_late)}" style="width:${o.p_late*100}%"></div></div>
-            <span class="prob-val">${(o.p_late*100).toFixed(1)}%</span>
+            <div class="prob-bar"><div class="prob-fill ${fillClass(riskBucket(o))}" style="width:${Math.max(0, Math.min(100, Number(o.p_late || 0) * 100))}%"></div></div>
+            <span class="prob-val">${pLateText(o.p_late)}</span>
           </div>
         </td>
         <td style="font-size:11px; color:var(--muted); line-height:1.5;">${getReasonText(o)}</td>
@@ -305,7 +344,7 @@ function renderBossTable(data) {
           ${getActionText(o)}
           ${window.edisState.currentRole === 'viewer'
             ? ``
-            : `<button class="run-btn" title="帶入 What-if 試算" style="width:auto; padding:2px 8px; font-size:10px; margin-left:6px; background:#dbeafe !important; color:#1e3a8a !important; border:1px solid #bfdbfe;" onclick="openDashboardSimulator('${sm}','${reg}',${days},${price},${qty},'${segment}','${market}','${date}')">🧪 What-if</button>`}
+            : `<button class="run-btn" title="分析單筆訂單調度風險" style="width:auto; padding:2px 8px; font-size:10px; margin-left:6px; background:#dbeafe !important; color:#1e3a8a !important; border:1px solid #bfdbfe;" onclick="openDashboardSimulator('${simulatorPayload}')">分析單筆訂單調度風險</button>`}
         </td>
       </tr>
       <tr id="explain-row-${hash}" class="hidden">
@@ -345,7 +384,7 @@ async function toggleRowExplanation(orderId) {
           <div style="display:flex; flex-direction:column; gap:10px;">
             <div style="font-weight:600; color:var(--navy); font-size:13px;">🔎 延遲特徵影響診斷 (LIME)：</div>
             <div style="background:white; border:1px solid var(--border); border-radius:6px; padding:12px; color:var(--text); line-height:1.6; font-weight:500;">
-              ${data.manager_summary || '無摘要說明。'}
+              ${buildManagerSummary(data)}
             </div>
             <div style="margin-top:6px;">
               <div style="font-weight:600; color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">特徵對機率的影響權重：</div>

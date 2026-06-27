@@ -392,14 +392,23 @@ body {
 .risk-pill {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  gap: 4px;
   padding: 3px 10px;
   border-radius: 12px;
   font-size: 11px;
   font-weight: 600;
+  line-height: 1.35;
+  white-space: nowrap;
 }
 .r-high { background: hsl(0, 100%, 96%); color: var(--danger); }
 .r-med  { background: hsl(38, 92%, 92%); color: var(--warning); }
 .r-low  { background: hsl(142, 60%, 92%); color: var(--success); }
+.risk-text-only {
+  background: transparent !important;
+  padding-left: 0;
+  padding-right: 0;
+}
 
 .prob-wrap { display: flex; align-items: center; gap: 10px; }
 .prob-bar  { width: 72px; height: 6px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
@@ -669,4 +678,3 @@ body.theme-minimalist .brand-mark {
     opacity: 1;
   }
 }
-

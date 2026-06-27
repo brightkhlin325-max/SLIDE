@@ -86,6 +86,8 @@ TEST_READY_PATH = DATA_DIR / "test_ready.csv"
 PROFIT_METRICS_PATH = DATA_DIR / "profit_model_metrics.json"
 PROFIT_PREDICTIONS_PATH = DATA_DIR / "profit_predictions.csv"
 PROFIT_MANIFEST_PATH = BASE_DIR / "models" / "profit_feature_manifest.json"
+PROFIT_MODEL_PATH = BASE_DIR / "models" / "profit_lightgbm_model.txt"
+PROFIT_SERVING_ARTIFACTS_PATH = BASE_DIR / "models" / "profit" / "serving_artifacts.json"
 LLM_RUNTIME_CONFIG_PATH = DATA_DIR / "llm_runtime_config.json"
 
 # DataFrame 快取機制
@@ -1151,6 +1153,7 @@ class SingleOrderPredictRequest(BaseModel):
     product_price: float = 59.99              # 商品單價（USD）
     order_item_quantity: int = 1               # 訂購數量
     customer_segment: str = "Consumer"        # Consumer / Corporate / Home Office
+    order_type: str = "PAYMENT"               # CASH / DEBIT / PAYMENT / TRANSFER
     department_name: str = "Fan Shop"         # 部門名稱（選填）
     market: str = "Europe"                    # Africa / Europe / LATAM / Pacific Asia / USCA
     order_date: Optional[str] = None          # 訂單日期（YYYY-MM-DD，選填）
@@ -1277,8 +1280,10 @@ def predict_single_order(
     if mkt_key in X:
         X[mkt_key] = 1
 
-    # Type — 用訓練中位數（預設 Type_PAYMENT=0 等全部為 0，一致）
-    # （表單未收集，保持全 0 or median）
+    # Type
+    type_key = f"Type_{body.order_type}"
+    if type_key in X:
+        X[type_key] = 1
 
     # ── 組成 DataFrame 並對齊特徵順序 ─────────────────────────────────
     import pandas as _pd
@@ -1726,13 +1731,36 @@ def get_predictions(
             "Days for shipment (scheduled)": "days_for_shipment",
             "Product Price": "product_price",
             "Order Item Quantity": "order_item_quantity",
+            "Order Item Discount Rate": "order_item_discount_rate",
+            "Order Item Profit Ratio": "order_item_profit_ratio",
+            "Order Profit Per Order": "order_profit_per_order",
+            "order_hour": "order_hour",
+        }
+        one_hot_groups = {
+            "Shipping Mode_": "shipping_mode",
+            "Customer Segment_": "customer_segment",
+            "Type_": "order_type",
+            "Market_": "market",
         }
         try:
-            details = pd.read_csv(TEST_READY_PATH, usecols=list(whatif_cols.keys()))
+            ready_header = pd.read_csv(TEST_READY_PATH, nrows=0).columns.tolist()
+            detail_cols = list(whatif_cols.keys())
+            for prefix in one_hot_groups:
+                detail_cols.extend([col for col in ready_header if col.startswith(prefix)])
+            detail_cols = [col for col in dict.fromkeys(detail_cols) if col in ready_header]
+            details = pd.read_csv(TEST_READY_PATH, usecols=detail_cols)
             if len(details) == len(df):
                 for src, dst in whatif_cols.items():
-                    if dst not in df.columns:
+                    if src in details.columns and dst not in df.columns:
                         df[dst] = pd.to_numeric(details[src], errors="coerce")
+                for prefix, dst in one_hot_groups.items():
+                    if dst in df.columns:
+                        continue
+                    group_cols = [col for col in details.columns if col.startswith(prefix)]
+                    if not group_cols:
+                        continue
+                    active = details[group_cols].apply(pd.to_numeric, errors="coerce").fillna(0)
+                    df[dst] = active.idxmax(axis=1).str.replace(prefix, "", regex=False)
         except Exception:
             pass
 
@@ -1827,6 +1855,11 @@ def get_predictions(
             "display_order_id": make_display_order_id(rec.get("order_id_hash")),
             "shipping_mode": rec.get("shipping_mode"),
             "order_region": rec.get("order_region"),
+            "customer_segment": rec.get("customer_segment"),
+            "order_type": rec.get("order_type"),
+            "market": rec.get("market"),
+            "order_date": rec.get("order_date"),
+            "order_hour": rec.get("order_hour"),
             "p_late": rec.get("p_late"),
             "risk_bucket": rec.get("risk_bucket"),
             "upgrade_cost": rec.get("upgrade_cost"),
@@ -1834,6 +1867,9 @@ def get_predictions(
             "days_for_shipment": rec.get("days_for_shipment"),
             "product_price": rec.get("product_price"),
             "order_item_quantity": rec.get("order_item_quantity"),
+            "order_item_discount_rate": rec.get("order_item_discount_rate"),
+            "order_item_profit_ratio": rec.get("order_item_profit_ratio"),
+            "order_profit_per_order": rec.get("order_profit_per_order"),
             "actual_late": rec.get("actual_late"),
             "predicted_late": rec.get("predicted_late"),
             "is_correct": rec.get("is_correct"),
@@ -2666,13 +2702,66 @@ def _load_profit_manifest() -> dict:
         return {}
 
 
+def _load_profit_serving_artifacts() -> dict:
+    if not PROFIT_SERVING_ARTIFACTS_PATH.exists():
+        return {}
+    try:
+        with open(PROFIT_SERVING_ARTIFACTS_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _load_profit_model_feature_names() -> list[str]:
+    if not PROFIT_MODEL_PATH.exists():
+        return []
+    try:
+        with open(PROFIT_MODEL_PATH, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("feature_names="):
+                    return [name for name in line.strip().split("=", 1)[1].split(" ") if name]
+    except Exception:
+        return []
+    return []
+
+
+def _profit_deployed_feature_contract() -> dict:
+    manifest = _load_profit_manifest()
+    artifacts = _load_profit_serving_artifacts()
+    manifest_features = list(manifest.get("feature_columns", []) or [])
+    artifact_features = list(artifacts.get("feature_columns", []) or [])
+    model_features = _load_profit_model_feature_names()
+
+    errors = []
+    if not manifest_features:
+        errors.append("profit_feature_manifest.json 缺少 feature_columns")
+    if not artifact_features:
+        errors.append("serving_artifacts.json 缺少 feature_columns")
+    if manifest_features and artifact_features and manifest_features != artifact_features:
+        errors.append("profit_feature_manifest.json 與 serving_artifacts.json 特徵不一致")
+    if model_features and manifest_features and len(model_features) != len(manifest_features):
+        errors.append("profit_lightgbm_model.txt 與 manifest 特徵數不一致")
+
+    feature_columns = manifest_features or artifact_features
+    return {
+        "manifest": manifest,
+        "artifacts": artifacts,
+        "feature_columns": feature_columns,
+        "feature_count": len(feature_columns),
+        "artifact_feature_count": len(artifact_features),
+        "model_feature_count": len(model_features),
+        "contract_errors": errors,
+    }
+
+
 @app.get("/api/profit/metrics")
 async def get_profit_metrics(
     x_role: Optional[str] = Header(default=None),
     authorization: Optional[str] = Header(default=None),
 ):
     metrics = _load_profit_metrics()
-    manifest = _load_profit_manifest()
+    contract = _profit_deployed_feature_contract()
+    manifest = contract["manifest"]
     if not metrics:
         return {
             "is_trained": False,
@@ -2684,14 +2773,27 @@ async def get_profit_metrics(
             ],
         }
 
+    metrics = dict(metrics)
+    metric_file_feature_count = int(metrics.get("feature_count") or 0)
+    deployed_feature_count = contract["feature_count"] or contract["model_feature_count"] or metric_file_feature_count
+    metrics["feature_count"] = deployed_feature_count
+    metrics["metric_file_feature_count"] = metric_file_feature_count
+    metrics["feature_count_basis"] = "deployed_contract"
+    if metric_file_feature_count and deployed_feature_count and metric_file_feature_count != deployed_feature_count:
+        metrics["metric_file_status"] = "stale_feature_count_overridden"
+
     return {
         "is_trained": True,
         "metrics": metrics,
         "manifest": {
             "target_column": manifest.get("target_column", metrics.get("target_column", "Order Profit Per Order")),
-            "feature_count": len(manifest.get("feature_columns", [])) or metrics.get("feature_count", 0),
-            "feature_columns": manifest.get("feature_columns", []),
+            "feature_count": deployed_feature_count,
+            "feature_columns": contract["feature_columns"],
             "model_path": manifest.get("model_path", "models/profit_lightgbm_model.txt"),
+            "artifact_feature_count": contract["artifact_feature_count"],
+            "model_feature_count": contract["model_feature_count"],
+            "metric_file_feature_count": metric_file_feature_count,
+            "contract_errors": contract["contract_errors"],
         },
     }
 
@@ -2702,15 +2804,32 @@ async def get_profit_feature_importance(
     authorization: Optional[str] = Header(default=None),
     limit: int = 20,
 ):
-    metrics = _load_profit_metrics()
-    importance = metrics.get("feature_importance") or {}
-    rows = [
-        {"feature": feature, "importance": float(value)}
-        for feature, value in importance.items()
-    ]
+    contract = _profit_deployed_feature_contract()
+    feature_columns = contract["feature_columns"]
+    rows = []
+
+    try:
+        import lightgbm as lgb
+        booster = lgb.Booster(model_file=str(PROFIT_MODEL_PATH))
+        importances = booster.feature_importance(importance_type="split")
+        for idx, value in enumerate(importances):
+            feature = feature_columns[idx] if idx < len(feature_columns) else booster.feature_name()[idx]
+            rows.append({"feature": feature, "importance": float(value)})
+    except Exception:
+        metrics = _load_profit_metrics()
+        importance = metrics.get("feature_importance") or {}
+        allowed = set(feature_columns)
+        rows = [
+            {"feature": feature, "importance": float(value)}
+            for feature, value in importance.items()
+            if not allowed or feature in allowed
+        ]
+
     rows.sort(key=lambda row: row["importance"], reverse=True)
     return {
-        "is_trained": bool(metrics),
+        "is_trained": bool(rows),
+        "source": "profit_lightgbm_model.txt",
+        "feature_count": contract["feature_count"],
         "data": rows[: max(1, min(limit, 100))],
     }
 
@@ -2817,8 +2936,8 @@ def _get_profit_runtime() -> dict:
         import lightgbm as lgb
         from profit_data_pipeline import ProfitDataPipeline
 
-        artifacts_path = BASE_DIR / "models" / "profit" / "serving_artifacts.json"
-        model_path = BASE_DIR / "models" / "profit_lightgbm_model.txt"
+        artifacts_path = PROFIT_SERVING_ARTIFACTS_PATH
+        model_path = PROFIT_MODEL_PATH
         if not (artifacts_path.exists() and model_path.exists()):
             raise HTTPException(status_code=503, detail="收益模型尚未就緒，請先執行收益管線與訓練。")
 
@@ -3466,7 +3585,6 @@ def _build_profit_trust_from_ready() -> dict:
     if not PROFIT_PREDICTIONS_PATH.exists() or not ready_path.exists():
         return {"by_segment": [], "by_region": [], "available": False, "reason": "profit_predictions 或 profit_test_ready 不存在"}
     try:
-        from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
         import numpy as np
 
         pred = pd.read_csv(PROFIT_PREDICTIONS_PATH)
@@ -3520,16 +3638,20 @@ def _build_profit_trust_from_ready() -> dict:
                 valid = pd.DataFrame({"actual": actual, "predicted": predicted}).dropna()
                 if len(valid) < min_n:
                     continue
+                actual_values = valid["actual"].to_numpy(dtype=float)
+                predicted_values = valid["predicted"].to_numpy(dtype=float)
+                residual = actual_values - predicted_values
+                total_variance = float(np.sum((actual_values - actual_values.mean()) ** 2))
                 r2 = None
-                if valid["actual"].std() > 1e-9:
-                    r2 = float(r2_score(valid["actual"], valid["predicted"]))
+                if total_variance > 1e-18:
+                    r2 = 1.0 - float(np.sum(residual ** 2)) / total_variance
                 rows.append({
                     "group": str(name),
                     "n": int(len(valid)),
-                    "mae": round(float(mean_absolute_error(valid["actual"], valid["predicted"])), 2),
-                    "rmse": round(float(np.sqrt(mean_squared_error(valid["actual"], valid["predicted"]))), 2),
+                    "mae": round(float(np.mean(np.abs(residual))), 2),
+                    "rmse": round(float(np.sqrt(np.mean(residual ** 2))), 2),
                     "r2": round(r2, 4) if r2 is not None else None,
-                    "resid_mean": round(float((valid["actual"] - valid["predicted"]).mean()), 2),
+                    "resid_mean": round(float(np.mean(residual)), 2),
                 })
             rows.sort(key=lambda r: r["n"], reverse=True)
             return rows
@@ -3617,28 +3739,11 @@ async def profit_leakage_audit(
     except Exception:
         LEAKAGE_COLUMNS, PII_COLUMNS, ID_COLUMNS, NOISE_COLUMNS = [], [], [], []
 
-    manifest = _load_profit_manifest()
-    artifacts_path = BASE_DIR / "models" / "profit" / "serving_artifacts.json"
-    serving_artifacts = {}
-    if artifacts_path.exists():
-        try:
-            with open(artifacts_path, encoding="utf-8") as f:
-                serving_artifacts = json.load(f)
-        except Exception:
-            serving_artifacts = {}
-
-    manifest_features = manifest.get("feature_columns", [])
-    artifact_features = serving_artifacts.get("feature_columns", [])
-    contract_errors = []
-    if not manifest_features:
-        contract_errors.append("profit_feature_manifest.json 缺少 feature_columns")
-    if not artifact_features:
-        contract_errors.append("serving_artifacts.json 缺少 feature_columns")
-    if manifest_features and artifact_features and manifest_features != artifact_features:
-        contract_errors.append("profit_feature_manifest.json 與 serving_artifacts.json 特徵不一致")
+    contract = _profit_deployed_feature_contract()
+    contract_errors = list(contract["contract_errors"])
 
     # 守門檢查部署模型真正採用的特徵契約，而非可能殘留的舊版 processed schema。
-    feature_cols = manifest_features or artifact_features
+    feature_cols = contract["feature_columns"]
     schema_path = DATA_DIR / "profit_feature_schema.json"
     legacy_schema_features = []
     if schema_path.exists():
@@ -3671,14 +3776,24 @@ async def profit_leakage_audit(
         "serving_contract": {
             "source": "profit_feature_manifest.json + serving_artifacts.json",
             "contract_errors": contract_errors,
+            "active_feature_count": len(feature_cols),
+            "model_feature_count": contract["model_feature_count"],
+            "artifact_feature_count": contract["artifact_feature_count"],
+            "legacy_schema_feature_count": len(legacy_schema_features),
             "legacy_schema_blocked": legacy_schema_blocked,
             "legacy_schema_status": "stale" if legacy_schema_blocked else "compatible",
+            "legacy_schema_ignored": bool(legacy_schema_blocked),
+            "legacy_schema_note": (
+                "舊 profit_feature_schema.json 為前處理殘留，不作為部署推論契約；"
+                "部署模型以 manifest + serving_artifacts + LightGBM 模型檔為準。"
+                if legacy_schema_blocked else "舊 schema 與部署契約相容。"
+            ),
         },
         "column_labeling": {
             "profit_actual": "真利潤（驗證集回填的實際 Order Profit Per Order）",
             "profit_pred": "收益模型預測值（前瞻估計，非實際）",
             "true_label / late_actual": "驗證集實際是否延遲",
-            "p_late / late_pred": "延遲模型預測機率",
+            "p_late / late_pred": "延遲模型預測機率（供 ROI/診斷分析，不是收益模型訓練特徵）",
         },
         "note": "收益欄一律標 actual/pred，不混稱『預測收益』當前瞻賭注（SLIDE 落地點 4）。",
     }
