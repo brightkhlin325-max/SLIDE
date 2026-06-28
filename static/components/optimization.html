@@ -102,13 +102,16 @@
             <thead>
               <tr>
                 <th>訂單</th>
-                <th>延遲機率</th>
-                <th>升級成本</th>
-                <th>預估淨效益</th>
+                <th>延遲機率 (P-late)</th>
+                <th>升級成本 (Upgrade Cost)</th>
+                <th>在險利潤 (EPAR)</th>
+                <th>帳載利潤 (Book Profit)</th>
+                <th>預估淨效益 (Net Benefit)</th>
+                <th>客群 (Segment)</th>
               </tr>
             </thead>
             <tbody id="optPageOrdList">
-              <tr><td colspan="4" style="text-align:center;padding:18px;color:var(--muted)">尚無調度明細</td></tr>
+              <tr><td colspan="7" style="text-align:center;padding:18px;color:var(--muted)">尚無調度明細</td></tr>
             </tbody>
           </table>
         </div>
@@ -119,8 +122,11 @@
 
 <!-- 項目4：ROI 真價值分析（併入最佳化調度，資料源 decision_dataset.csv，與調度的 predictions.csv 同源） -->
 <div style="margin-top:28px; padding-top:8px; border-top:2px solid var(--border);">
-  <h2 style="font-size:18px; font-weight:700; margin:8px 0 4px;">ROI 真價值分析</h2>
+  <h2 style="font-size:18px; font-weight:700; margin:8px 0 4px;">ROI 真價值分析（利潤角度）</h2>
   <div style="font-size:13px; color:var(--muted); margin-bottom:8px;">以驗證集真答案揭露「帳面賺、實際因延遲賠」的訂單；資料源 decision_dataset.csv（由 predictions.csv 彙總，與上方調度同源）。</div>
+  <div style="font-size:12.5px; color:#8a6d3b; background:#fef6e4; border:1px solid #f0c674; border-radius:8px; padding:8px 12px; margin-bottom:10px; line-height:1.6;">
+    分工說明：上方「最佳化調度」按 <b>延遲救援淨效益</b>（避免的延遲損失 − 升級成本）在預算內選單；本區提供 <b>利潤角度</b>——用「<b>在險利潤 EPAR ＝ 帳載利潤 × 延遲機率</b>」排序，看哪些單把最多利潤暴露在延遲風險下、該優先介入。兩者互補。
+  </div>
 </div>
 <div id="optRoiAnalysis">
   <div style="padding:40px; text-align:center; color:var(--muted);">載入 ROI 分析中...</div>

@@ -1,6 +1,9 @@
 <div class="page-header">
   <h1 class="page-title">收益預測</h1>
-  <div class="page-sub">以獨立迴歸模型預測每筆訂單的 Order Profit Per Order</div>
+  <div class="page-sub">收益模型 ≈ 毛利率 × 銷售額 的算式估計（樣本內），非前瞻真預測</div>
+</div>
+<div style="margin:0 0 16px; padding:10px 14px; background:#fef6e4; border:1px solid #f0c674; border-radius:8px; font-size:12.5px; color:#8a6d3b; line-height:1.6;">
+  ⚠ 此處「收益」為 <b>利潤估計（= 毛利率 × 銷售額 的算式，樣本內）</b>，非真正的前瞻預測；R² 偏高來自此恆等式（拿掉毛利率後 R²≈0）。<b>決策請改用「帳載利潤 / 在險利潤 EPAR」</b>（見最佳化調度頁的 ROI 真價值分析）。
 </div>
 
 <!-- 收益診斷：帳戶劣化趨勢 + leakage gate -->
@@ -65,7 +68,7 @@
       <div class="kpi-foot">平均絕對金額誤差</div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-label">R2 <span class="roi-info" title="決定係數：衡量模型能解釋利潤變化的比例。越接近 1.0 代表預測能力極高，小於 0 代表模型比瞎猜還糟。">ⓘ</span></div>
+      <div class="kpi-label">R2 <span class="roi-info" title="決定係數。注意：本收益模型 ≈ 毛利率×銷售額 的恆等式，R² 偏高來自此算式、非前瞻預測力（拿掉毛利率後 R²≈0）。請勿當真預測能力解讀。">ⓘ</span></div>
       <div class="kpi-value" id="profitR2">--</div>
       <div class="kpi-foot">收益變異解釋力</div>
     </div>
@@ -103,7 +106,7 @@
             <tr>
               <th>樣本</th>
               <th>實際收益</th>
-              <th>預測收益</th>
+              <th>利潤估計(算式)</th>
               <th>誤差</th>
               <th>|誤差|</th>
             </tr>

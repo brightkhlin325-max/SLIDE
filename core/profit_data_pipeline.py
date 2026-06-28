@@ -88,8 +88,10 @@ def _abs_corr(x: pd.Series, y: pd.Series) -> float:
     return 0.0 if np.isnan(r) else abs(r)
 
 NUMERIC_FEATURES = [
-    "Days for shipping (real)", "Days for shipment (scheduled)",
-    "Sales per customer", "Late_delivery_risk", "Latitude", "Longitude",
+    # B0-4：移除 "Days for shipping (real)"、"Late_delivery_risk"（兩者屬 LEAKAGE_COLUMNS，
+    #        洩漏欄不該同時出現在特徵清單，否則 fit 丟、transform 取 → KeyError）
+    "Days for shipment (scheduled)",
+    "Sales per customer", "Latitude", "Longitude",
     "Order Item Discount", "Order Item Discount Rate",
     "Order Item Profit Ratio",   # 視為下單時已知的定價 margin（見 MD §11.6）
     "Order Item Product Price", "Order Item Quantity",

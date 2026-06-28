@@ -15,3 +15,7 @@ data/raw/
 # 本機備份檔（如 edis_users.db.local.bak），永不納入版控
 *.bak
 *.local.bak
+
+# demo 上傳範本（刻意納入版控，供組員測試上傳；覆寫上面的 *.csv 忽略）
+!data/demo_uploads/
+!data/demo_uploads/*.csv

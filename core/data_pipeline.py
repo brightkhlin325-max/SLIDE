@@ -146,21 +146,33 @@ class DataPipeline:
         # Step 6.5：保存服務端一致化產物（中位數 + 編碼器類別）
         self.save_serving_artifacts(output_dir)
 
-        # Step 7：train/test split
-        X_train_full, X_test, y_train_full, y_test, meta_train_full, meta_test = train_test_split(
-            X, y, metadata,
-            test_size=self.test_size,
-            random_state=self.random_state,
-            stratify=y,
-        )
-        X_train, X_val, y_train, y_val, meta_train, meta_val = train_test_split(
-            X_train_full,
-            y_train_full,
-            meta_train_full,
-            test_size=self.val_size / (self.train_size + self.val_size),
-            random_state=self.random_state,
-            stratify=y_train_full,
-        )
+        # Step 7：train/test split — 按 Order Id 分組（P4，A：GroupShuffleSplit，放棄分層）。
+        # 同一張單的多個品項整批進同一側，杜絕 group leakage（AUC 才誠實，約 0.80→0.76）。
+        from sklearn.model_selection import GroupShuffleSplit
+        groups = metadata["order_id_hash"].to_numpy() if "order_id_hash" in metadata.columns else None
+        if groups is not None:
+            gss1 = GroupShuffleSplit(n_splits=1, test_size=self.test_size, random_state=self.random_state)
+            tr_full_idx, test_idx = next(gss1.split(X, y, groups=groups))
+            X_train_full, X_test = X.iloc[tr_full_idx], X.iloc[test_idx]
+            y_train_full, y_test = y.iloc[tr_full_idx], y.iloc[test_idx]
+            meta_train_full, meta_test = metadata.iloc[tr_full_idx], metadata.iloc[test_idx]
+            groups_tf = groups[tr_full_idx]
+            gss2 = GroupShuffleSplit(n_splits=1,
+                                     test_size=self.val_size / (self.train_size + self.val_size),
+                                     random_state=self.random_state)
+            tr_idx, val_idx = next(gss2.split(X_train_full, y_train_full, groups=groups_tf))
+            X_train, X_val = X_train_full.iloc[tr_idx], X_train_full.iloc[val_idx]
+            y_train, y_val = y_train_full.iloc[tr_idx], y_train_full.iloc[val_idx]
+            meta_train, meta_val = meta_train_full.iloc[tr_idx], meta_train_full.iloc[val_idx]
+        else:
+            # 後備：無 order_id_hash 時退回原本的分層切分（不致中斷）
+            X_train_full, X_test, y_train_full, y_test, meta_train_full, meta_test = train_test_split(
+                X, y, metadata, test_size=self.test_size,
+                random_state=self.random_state, stratify=y)
+            X_train, X_val, y_train, y_val, meta_train, meta_val = train_test_split(
+                X_train_full, y_train_full, meta_train_full,
+                test_size=self.val_size / (self.train_size + self.val_size),
+                random_state=self.random_state, stratify=y_train_full)
 
         # Step 8：儲存
         self._save_processed(

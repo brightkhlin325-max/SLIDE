@@ -598,7 +598,7 @@ def test_optimization_layout_and_dashboard_cards_are_aligned():
     assert "flex-direction:column" in optimization
     assert "max-height:420px" in optimization
     assert '<tbody id="optPageOrdList">' in optimization
-    assert "<th>預估淨效益</th>" in optimization
+    assert "<th>預估淨效益 (Net Benefit)</th>" in optimization
     assert "<tr>" in opt_js
     assert "positive net benefit" not in opt_js
     assert "repeat(2, minmax(0, 1fr))" in dashboard
