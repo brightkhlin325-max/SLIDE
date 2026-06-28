@@ -98,6 +98,7 @@ def predict_uploaded_csv(file_path_or_buffer, mapping_path: Path, model_path: Pa
         "Order Item Product Price": "product_price",
         "Order Item Quantity": "order_item_quantity",
         "Order Item Discount Rate": "discount_rate",
+        "Order Item Profit Ratio": "order_item_profit_ratio",
         "Sales": "sales",
         "Order Item Total": "sales",
         "Sales per customer": "sales",
@@ -235,30 +236,21 @@ def predict_uploaded_csv(file_path_or_buffer, mapping_path: Path, model_path: Pa
     
     active_df["expected_penalty"] = (active_df["p_late"] * 250.0).round(2)
     
-    # 實作 SSOT Rate Card 動態運費計費
-    shipping_base_costs = {
-        "Standard Class": 50.0,
-        "Second Class": 80.0,
-        "First Class": 120.0,
-        "Same Day": 180.0,
-    }
-    region_multipliers = {
-        "Western Europe": 1.1,
-        "Central America": 0.9,
-        "South America": 0.95,
-        "Northern Europe": 1.25,
-        "Eastern Europe": 1.05,
-        "North America": 1.15,
-        "East Asia": 1.2,
-        "Oceania": 1.3,
-    }
+    # 升級成本改用 SSOT 費率卡（rate_card），key 已校正（B0-3）
+    from rate_card import upgrade_cost as _rc_upgrade_cost
     def get_dynamic_upgrade_cost(row):
-        mode = row.get("shipping_mode", "Standard Class")
-        region = row.get("order_region", "Unknown")
-        base = shipping_base_costs.get(mode, 80.0)
-        mult = region_multipliers.get(region, 1.0)
-        return round(base * mult, 2)
+        return _rc_upgrade_cost(
+            row.get("shipping_mode", "Standard Class"),
+            row.get("order_region", "Unknown"),
+        )
         
     active_df["upgrade_cost"] = active_df.apply(get_dynamic_upgrade_cost, axis=1)
-    
+
+    # §8 前置：上傳單若帶 Sales + 毛利率 → 算帳載利潤 profit_actual（= Sales × 毛利率，恆等式）。
+    # 缺任一欄就跳過（不報錯；無利潤的單於接單救援會標「需 Sales/毛利率」）。
+    if "sales" in active_df.columns and "order_item_profit_ratio" in active_df.columns:
+        _sales = pd.to_numeric(active_df["sales"], errors="coerce")
+        _margin = pd.to_numeric(active_df["order_item_profit_ratio"], errors="coerce")
+        active_df["profit_actual"] = (_sales * _margin).round(2)
+
     return active_df

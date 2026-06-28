@@ -56,9 +56,12 @@ async function runPageOptimize() {
         <td><span class="order-id" title="${o.order_id_hash}">${o.display_order_id || displayOrderId(o.order_id_hash)}</span></td>
         <td>${(o.p_late * 100).toFixed(0)}%</td>
         <td>$${Number(o.upgrade_cost || 0).toLocaleString()}</td>
+        <td style="${o.epar != null && o.epar < 0 ? 'color:var(--danger);font-weight:700;' : ''}">${o.epar != null ? '$' + Number(o.epar).toLocaleString() : '—'}</td>
+        <td>${o.profit_actual != null ? '$' + Number(o.profit_actual).toLocaleString() : '—'}</td>
         <td style="font-weight:700;color:#15803d;">+$${Number(o.net_benefit ?? o.expected_saving ?? 0).toLocaleString()}</td>
+        <td>${o.customer_segment || '—'}</td>
       </tr>
-    `).join('') || `<tr><td colspan="4" style="text-align:center;padding:18px;color:var(--muted)">此參數下沒有建議升級訂單</td></tr>`;
+    `).join('') || `<tr><td colspan="7" style="text-align:center;padding:18px;color:var(--muted)">此參數下沒有建議升級訂單</td></tr>`;
     
   } catch (e) {
     alert(e.message);

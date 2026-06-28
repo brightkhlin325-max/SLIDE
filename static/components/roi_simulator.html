@@ -199,20 +199,21 @@
   <div class="panel">
     <div class="panel-head">
       <div>
-        <div class="panel-title">風險暴露名單 (At-Risk by Margin)</div>
-        <div class="panel-subtitle">最該優先處理的訂單（利潤高且延遲機率高）</div>
+        <div class="panel-title" id="roiAtRiskTitle">風險暴露名單 (At-Risk by Margin)</div>
+        <div class="panel-subtitle" id="roiAtRiskSub">最該優先處理的訂單（利潤高且延遲機率高）</div>
       </div>
       <span class="tag" id="roiAtRiskCount">0 筆</span>
     </div>
+    <div id="roiRescueSummary" style="display:none; margin:0 18px 10px; padding:8px 12px; font-size:12.5px; line-height:1.6; background:#fdecea; border:1px solid #f5b7b1; border-radius:8px; color:#922b21;"></div>
     <div class="table-scroll" style="max-height:380px;">
       <table class="risk-table">
         <thead>
-          <tr>
-            <th>訂單</th>
-            <th>EPAR</th>
-            <th>帳載利潤</th>
-            <th>P(late)</th>
-            <th>客群</th>
+          <tr id="roiAtRiskHead">
+            <th>訂單 (Order)</th>
+            <th>在險利潤 (EPAR)</th>
+            <th>帳載利潤 (Book Profit)</th>
+            <th>延遲機率 (P-late)</th>
+            <th>客群 (Segment)</th>
           </tr>
         </thead>
         <tbody id="roiAtRiskBody">

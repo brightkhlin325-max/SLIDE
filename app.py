@@ -1299,26 +1299,9 @@ def predict_single_order(
     delay_penalty   = 250.0
     expected_penalty = round(p_late * delay_penalty, 2)
 
-    # 動態升級成本（與 preprocessor.py 一致的費率表）
-    shipping_base_costs = {
-        "Standard Class": 50.0,
-        "Second Class":   80.0,
-        "First Class":   120.0,
-        "Same Day":      180.0,
-    }
-    region_multipliers = {
-        "Western Europe":    1.1,
-        "Central America":   0.9,
-        "South America":     0.95,
-        "Northern Europe":   1.25,
-        "Eastern Europe":    1.05,
-        "East of USA":       1.15,
-        "Eastern Asia":      1.2,
-        "Oceania":           1.3,
-    }
-    base_cost = shipping_base_costs.get(body.shipping_mode, 80.0)
-    mult      = region_multipliers.get(body.order_region, 1.0)
-    upgrade_cost    = round(base_cost * mult, 2)
+    # 升級成本改用 SSOT 費率卡（rate_card），與其他模組統一（B0-3）
+    from rate_card import upgrade_cost as _rc_upgrade_cost
+    upgrade_cost    = _rc_upgrade_cost(body.shipping_mode, body.order_region)
     net_benefit     = round(expected_penalty - upgrade_cost, 2)
 
     return {
@@ -1396,6 +1379,13 @@ async def upload_csv(
             mapping_path=mapping_path,
             model_path=model_path
         )
+
+        # P11：空檔防呆——沒有可預測的資料列直接擋（避免存出空 session 檔誤導全站）。
+        if df_predicted is None or len(df_predicted) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="上傳檔沒有可預測的資料列，請確認檔案內容（需至少一筆訂單）。",
+            )
 
         if x_session_id:
             safe_id = "".join(c for c in x_session_id if c.isalnum() or c in ("-", "_"))
@@ -2167,6 +2157,29 @@ def run_optimization(
 
     pred_path = get_predictions_path(x_session_id)
     result_dict = build_optimization_result(request, pred_path, save_results=True)
+
+    # §8.2 B：把選中訂單補上 EPAR / 帳載利潤 / 客群（與 ROI 同源、session-aware）。
+    # additive：用既有 _load_roi_df 對照 order_id_hash；失敗不影響主結果。
+    try:
+        roi_df, roi_scope = _load_roi_df(x_session_id)
+        if roi_df is not None and not roi_df.empty and "order_id_hash" in roi_df.columns:
+            pcol = roi_scope["profit_column"]
+            rmap = roi_df.set_index("order_id_hash")
+            for o in result_dict.get("selected_orders", []) or []:
+                h = o.get("order_id_hash")
+                if h is None or h not in rmap.index:
+                    continue
+                r = rmap.loc[h]
+                if getattr(r, "ndim", 1) > 1:   # 萬一重複 index → 取第一列
+                    r = r.iloc[0]
+                if "epar" in r:
+                    o["epar"] = round(float(r["epar"]), 2)
+                if pcol in r:
+                    o["profit_actual"] = round(float(r[pcol]), 2)
+                if "customer_segment" in r:
+                    o["customer_segment"] = str(r["customer_segment"])
+    except Exception:
+        pass
 
     return {
         "role": role,
@@ -3120,6 +3133,107 @@ def _predict_profit_batch(feature_rows: list[dict]) -> list[float]:
     return [float(v) for v in rt["booster"].predict(X)]
 
 
+# ── §8 接單救援:批次延遲評分(模型只載一次,供逐單×網格掃描,防 overload)──
+_DELAY_SERVING_CACHE: dict = {}
+
+
+def _sf(v, default):
+    """安全轉 float:None/NA/非數值 → default。"""
+    try:
+        if v is None or pd.isna(v):
+            return float(default)
+        return float(v)
+    except Exception:
+        return float(default)
+
+
+def _get_delay_serving() -> dict:
+    """載入延遲模型的 feature_mapping / serving_artifacts(快取,只讀一次)。"""
+    if not _DELAY_SERVING_CACHE.get("loaded"):
+        mapping_path = BASE_DIR / "models" / "feature_mapping.json"
+        artifact_path = BASE_DIR / "models" / "serving_artifacts.json"
+        model_path = BASE_DIR / "models" / "xgboost_model.json"
+        with open(mapping_path, "r", encoding="utf-8") as f:
+            mappings = json.load(f)
+        medians, classes = {}, {}
+        if artifact_path.exists():
+            try:
+                with open(artifact_path, "r", encoding="utf-8") as f:
+                    art = json.load(f)
+                medians = art.get("feature_medians", {}) or {}
+                classes = art.get("label_classes", {}) or {}
+            except Exception:
+                pass
+        _DELAY_SERVING_CACHE.update({
+            "loaded": True, "mappings": mappings, "medians": medians,
+            "classes": classes, "model_path": model_path,
+        })
+    return _DELAY_SERVING_CACHE
+
+
+def _delay_feature_row(o: dict, mappings: dict, medians: dict, classes: dict) -> dict:
+    """建立單列延遲特徵(與 predict_single_order 邏輯一致),供批次堆疊。"""
+    feature_cols = mappings.get("feature_columns", [])
+    disc = o.get("order_item_discount_rate")
+    X: dict = {
+        "Days for shipment (scheduled)": _sf(o.get("days_for_shipment"), medians.get("Days for shipment (scheduled)", 4.0)),
+        "Product Price": _sf(o.get("product_price"), medians.get("Product Price", 59.99)),
+        "Order Item Quantity": _sf(o.get("order_item_quantity"), medians.get("Order Item Quantity", 1)),
+        "Order Item Discount Rate": _sf(disc, medians.get("Order Item Discount Rate", 0.1)),
+        "Order Item Profit Ratio": _sf(o.get("order_item_profit_ratio"), medians.get("Order Item Profit Ratio", 0.27)),
+        "Order Profit Per Order": _sf(o.get("order_profit_per_order"), medians.get("Order Profit Per Order", 31.52)),
+    }
+    od = o.get("order_date")
+    dt = pd.to_datetime(od, errors="coerce") if od is not None else pd.NaT
+    if not pd.isnull(dt):
+        X["order_dayofweek"] = int(dt.dayofweek)
+        X["order_month"] = int(dt.month)
+        X["order_hour"] = int(dt.hour)
+        X["order_is_weekend"] = int(dt.dayofweek >= 5)
+    else:
+        X["order_dayofweek"] = int(medians.get("order_dayofweek", 3))
+        X["order_month"] = int(medians.get("order_month", 6))
+        X["order_hour"] = int(medians.get("order_hour", 11))
+        X["order_is_weekend"] = 0
+    label_cols_map = {
+        "Order Region": o.get("order_region") or "Western Europe",
+        "Category Name": o.get("category_name") or "Accessories",
+        "Order Country": o.get("order_country") or "Francia",
+    }
+    for col, val in label_cols_map.items():
+        cls = classes.get(col, mappings.get(col, []))
+        v2i = {v: i for i, v in enumerate(cls)}
+        fb = int(medians.get(f"{col}_encoded", 0))
+        X[f"{col}_encoded"] = int(v2i.get(str(val), fb))
+    for col in feature_cols:
+        if col not in X:
+            X[col] = 0
+    for key in (
+        f"Shipping Mode_{o.get('shipping_mode') or 'Standard Class'}",
+        f"Customer Segment_{o.get('customer_segment') or 'Consumer'}",
+        f"Department Name_{o.get('department_name') or 'Fan Shop'}",
+        f"Market_{o.get('market') or 'Europe'}",
+        f"Type_{o.get('order_type') or 'PAYMENT'}",
+    ):
+        if key in X:
+            X[key] = 1
+    return X
+
+
+def _predict_delay_batch(orders: list[dict]) -> list[float]:
+    """批次延遲評分:一次 predict_proba(供接單救援掃描,避免逐筆呼叫造成過載)。"""
+    if not orders:
+        return []
+    sv = _get_delay_serving()
+    mappings, medians, classes = sv["mappings"], sv["medians"], sv["classes"]
+    feature_cols = mappings.get("feature_columns", [])
+    rows = [_delay_feature_row(o, mappings, medians, classes) for o in orders]
+    X = pd.DataFrame(rows)[feature_cols].fillna(0)
+    model = _get_delay_xgb_model(sv["model_path"])
+    proba = model.predict_proba(X)[:, 1]
+    return [float(p) for p in proba]
+
+
 def _session_prediction_file(x_session_id: Optional[str]) -> Optional[Path]:
     """只在 session 專屬預測檔存在時回傳；未上傳則回 None。"""
     if not x_session_id:
@@ -3261,7 +3375,8 @@ def _roi_scope(source: str, df: pd.DataFrame, has_ground_truth: bool) -> dict:
             "profit_column": "profit_pred",
             "delay_cost_basis": delay_basis,
             "has_ground_truth": has_ground_truth,
-            "false_positive_available": False,
+            # 有回填真實延遲標籤時，「假性賺錢比例」即可計算（預測會賺、實際因延遲賠）；無答案才 N/A。
+            "false_positive_available": has_ground_truth,
             "note": note,
         }
 
@@ -3486,6 +3601,157 @@ def roi_optimize(
     return res
 
 
+class RescueRequest(BaseModel):
+    """§8 接單救援掃描參數(沿用 whatif 網格上限,防爆量)。"""
+    discount_grid: list[float] = [0.0, 0.05, 0.1, 0.15, 0.2, 0.25]
+    mode_grid: list[str] = ["Standard Class", "Second Class", "First Class", "Same Day"]
+    penalty: float = 250.0
+    max_orders: int = 200
+
+
+@app.post("/api/roi/rescue")
+def roi_rescue(
+    body: RescueRequest,
+    x_role: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
+    x_session_id: Optional[str] = Header(default=None),
+):
+    """
+    §8 接單救援:僅作用於『本次上傳的待接單訂單』。
+    對「真價值(逐模式 net)為負」的單,掃 折扣×運送 網格,找把淨值救到最大的單一最佳組合。
+    net(mode,disc) = 利潤(disc;收益模型) − p_late(mode,disc;延遲模型逐模式重算)×罰金 − shipping_cost(mode;費率卡)
+    不雙重計費:升級=選更貴更快模式 → shipping_cost↑ 與 p_late↓ 一起表達,無獨立升級費+全額懲罰。
+    """
+    session_path = _session_prediction_file(x_session_id)
+    if session_path is None:
+        return {
+            "available": False,
+            "reason": "接單救援僅作用於『上傳的待接單訂單』。請先用『匯入待預測訂單』上傳檔案。",
+            "recommendations": [],
+        }
+    raw = load_cached_predictions(session_path)
+    if raw is None or raw.empty:
+        return {"available": False, "reason": "上傳檔無資料。", "recommendations": []}
+
+    penalty = max(0.0, float(body.penalty))
+    discounts = list(dict.fromkeys([round(float(d), 4) for d in body.discount_grid]))[:8]
+    modes = list(dict.fromkeys([str(m) for m in body.mode_grid]))[:6]
+    if not discounts or not modes:
+        raise HTTPException(status_code=400, detail="discount_grid 與 mode_grid 不可為空。")
+
+    # 1) 用既有 SSOT 求每單現況(逐模式 net 基準),挑真價值<0 的單
+    order_df, has_gt = _build_roi_session_df(raw)
+    scope = _roi_scope("session_upload", order_df, has_gt)
+    if order_df.empty:
+        return {"available": True, "negative_orders": 0, "recommendations": [], "data_scope": scope,
+                "message": "本次上傳無可評估訂單。"}
+    od = order_df.copy()
+    od["order_id_hash"] = od["order_id_hash"].astype(str)
+    base_profit = pd.to_numeric(od["profit_pred"], errors="coerce").fillna(0.0)
+    base_plate = pd.to_numeric(od["p_late"], errors="coerce").fillna(0.0)
+    base_ship = pd.to_numeric(od["upgrade_cost"], errors="coerce").fillna(0.0)
+    od["base_net"] = (base_profit - base_plate * penalty - base_ship).round(4)
+    neg = od[od["base_net"] < 0].sort_values("base_net").head(max(1, min(int(body.max_orders), 200)))
+    if neg.empty:
+        return {"available": True, "negative_orders": 0, "recommendations": [], "data_scope": scope,
+                "message": "本次上傳沒有真價值為負的訂單,無需救援。"}
+    neg_ids = list(neg["order_id_hash"])
+    neg_set = set(neg_ids)
+
+    # 2) 取這些單的原始(品項級)列,逐 (品項 × 運送 × 折扣) 批次評分(防爆量)
+    raw2 = raw.copy()
+    raw2["order_id_hash"] = _series_or_default(raw2, "order_id_hash", "").astype(str)
+    items = raw2[raw2["order_id_hash"].isin(neg_set)].to_dict("records")
+    combos = [(m, d) for d in discounts for m in modes]
+    prof_rows, delay_rows, keys = [], [], []
+    for it in items:
+        oid = str(it.get("order_id_hash"))
+        region = it.get("order_region") or "Western Europe"
+        for (m, d) in combos:
+            feat = {
+                "shipping_mode": m, "order_region": region,
+                "category_name": it.get("category_name") or "Unknown",
+                "customer_segment": it.get("customer_segment") or "Unknown",
+                "market": it.get("market") or "Unknown",
+                "product_price": _sf(it.get("product_price"), 59.99),
+                "order_item_quantity": _sf(it.get("order_item_quantity"), 1),
+                "discount_rate": d,
+                "days_for_shipment": _sf(it.get("days_for_shipment"), 4.0),
+                "order_date": it.get("order_date"),
+                "sales": None,  # 由 _build_profit_raw_row 以 price×qty×(1−disc) 重算 → 折扣槓桿生效
+            }
+            prof_rows.append(feat)
+            delay_rows.append({**feat, "order_item_discount_rate": d,
+                               "order_item_profit_ratio": it.get("order_item_profit_ratio"),
+                               "order_country": it.get("order_country") or "Francia"})
+            keys.append((oid, m, d))
+
+    profits = _predict_profit_batch(prof_rows)
+    plates = _predict_delay_batch(delay_rows)
+
+    # 3) 彙整到 (訂單, 運送, 折扣):利潤加總、p_late 取平均(與 _build_roi_session_df 一致)
+    agg_p, agg_pl, agg_n = {}, {}, {}
+    for (oid, m, d), pr, pl in zip(keys, profits, plates):
+        k = (oid, m, d)
+        agg_p[k] = agg_p.get(k, 0.0) + float(pr)
+        agg_pl[k] = agg_pl.get(k, 0.0) + float(pl)
+        agg_n[k] = agg_n.get(k, 0) + 1
+
+    from rate_card import upgrade_cost as _rc_upgrade_cost
+    region_by_order = {str(r.order_id_hash): str(r.order_region) for r in neg.itertuples(index=False)}
+    seg_by_order = {str(r.order_id_hash): str(r.customer_segment) for r in neg.itertuples(index=False)}
+    ship_by_order = {str(r.order_id_hash): str(r.shipping_mode) for r in neg.itertuples(index=False)}
+    base_net_by_order = {str(r.order_id_hash): float(r.base_net) for r in neg.itertuples(index=False)}
+
+    recommendations = []
+    rescued = 0
+    for oid in neg_ids:
+        region = region_by_order.get(oid, "Western Europe")
+        best = None
+        for (m, d) in combos:
+            k = (oid, m, d)
+            if k not in agg_n:
+                continue
+            prof = agg_p[k]
+            plate = agg_pl[k] / max(1, agg_n[k])
+            ship = _rc_upgrade_cost(m, region)
+            net = prof - plate * penalty - ship
+            if best is None or net > best["net"]:
+                best = {"net": net, "mode": m, "disc": d, "plate": plate, "profit": prof, "ship": ship}
+        if best is None:
+            continue
+        base_net = base_net_by_order.get(oid, 0.0)
+        can_accept = best["net"] > 0
+        if can_accept:
+            rescued += 1
+        recommendations.append({
+            "id": make_display_order_id(oid),
+            "current_shipping": ship_by_order.get(oid, "Standard Class"),
+            "segment": seg_by_order.get(oid, "Unknown"),
+            "region": region,
+            "base_net": round(base_net, 2),
+            "recommend_shipping": best["mode"],
+            "recommend_discount": round(best["disc"], 4),
+            "rescued_net": round(best["net"], 2),
+            "improvement": round(best["net"] - base_net, 2),
+            "rescued_p_late": round(best["plate"], 4),
+            "rescued_profit": round(best["profit"], 2),
+            "rescued_shipping_cost": round(best["ship"], 2),
+            "decision": "可接單(已轉正)" if can_accept else "仍為負,建議婉拒/重議",
+        })
+
+    return {
+        "available": True,
+        "penalty_basis": penalty,
+        "negative_orders": int(len(neg_ids)),
+        "rescued_to_positive": int(rescued),
+        "discounts": discounts,
+        "modes": modes,
+        "recommendations": recommendations,
+        "data_scope": scope,
+    }
+
+
 @app.post("/api/profit/predict-single")
 def profit_predict_single(
     body: ProfitSingleRequest,
@@ -3514,6 +3780,7 @@ def roi_whatif(
     base = body.dict()
     grid = []
     best = None
+    from rate_card import upgrade_cost as _rc_upgrade_cost  # P8：whatif 補回運費，用 SSOT 費率卡
     for disc in discounts:
         for mode in modes:
             feat = {**base, "discount_rate": disc, "shipping_mode": mode}
@@ -3531,12 +3798,14 @@ def roi_whatif(
             )
             delay = predict_single_order(delay_req)   # 重用既有延遲單筆預測（cached model）
             p_late = float(delay["p_late"])
-            net = profit_pred - p_late * penalty
+            ship_cost = _rc_upgrade_cost(mode, body.order_region)  # P8：該運送模式的成本
+            net = profit_pred - p_late * penalty - ship_cost
             cell = {
                 "discount_rate": disc,
                 "shipping_mode": mode,
                 "profit_pred": round(profit_pred, 2),
                 "p_late": round(p_late, 4),
+                "shipping_cost": round(ship_cost, 2),
                 "expected_net": round(net, 2),
             }
             grid.append(cell)

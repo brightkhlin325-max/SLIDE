@@ -29,6 +29,33 @@ async function loadModelPerformance() {
       document.getElementById('cm-fp').innerHTML = `${fp.toLocaleString()}<br><span style="font-size:9px;color:var(--muted);font-weight:400;">False Positives</span>`;
       document.getElementById('cm-fn').innerHTML = `${fn.toLocaleString()}<br><span style="font-size:9px;color:var(--muted);font-weight:400;">False Negatives</span>`;
       document.getElementById('cm-tp').innerHTML = `${tp.toLocaleString()}<br><span style="font-size:9px;color:var(--muted);font-weight:400;">True Positives</span>`;
+    } else {
+      // §7.5 無真答案（待回填）：混淆矩陣不顯示舊值/亂算，標「待回填」
+      ['cm-tn', 'cm-fp', 'cm-fn', 'cm-tp'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = `待回填<br><span style="font-size:9px;color:var(--muted);font-weight:400;">尚未回填真實 Y</span>`;
+      });
+    }
+    // §7.5 無真答案時，標示 Precision/Recall/F1 為基準值（非本次上傳）
+    if (d.has_ground_truth === false) {
+      const note = d.metric_note || '目前 session 資料尚未回填真實 Y；Precision/Recall/F1 為基準模型值，非本次上傳實測。';
+      ['perfPrecision', 'perfRecall', 'perfF1'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.title = note;
+      });
+      let banner = document.getElementById('perfNoGtBanner');
+      const auc = document.getElementById('perfAuc');
+      const host = auc ? auc.closest('.panel, .card, section') || auc.parentElement : null;
+      if (!banner && host) {
+        banner = document.createElement('div');
+        banner.id = 'perfNoGtBanner';
+        banner.style.cssText = 'margin:8px 0;padding:8px 12px;font-size:12.5px;line-height:1.6;background:#fef6e4;border:1px solid #f0c674;border-radius:8px;color:#8a6d3b;';
+        host.insertBefore(banner, host.firstChild);
+      }
+      if (banner) { banner.textContent = '⚠ ' + note; banner.style.display = 'block'; }
+    } else {
+      const banner = document.getElementById('perfNoGtBanner');
+      if (banner) banner.style.display = 'none';
     }
     
     // 繪製 XGBoost 特徵重要性
@@ -69,11 +96,14 @@ async function loadModelPerformance() {
     // 載入預測誤差清單 (供工程師進行模型診斷分析)
     const errorsRes = await fetch(`${API_BASE}/api/predict?limit=250&threshold=${window.edisState.threshold}&error_only=true`).then(r => r.json());
     const errors = errorsRes.data || [];
-    document.getElementById('errorListCount').textContent = `共 ${errorsRes.count || errors.length} 筆誤差`;
+    const _noGt = d.has_ground_truth === false;
+    document.getElementById('errorListCount').textContent = _noGt ? '待回填' : `共 ${errorsRes.count || errors.length} 筆誤差`;
     const errorBody = document.getElementById('errorListTableBody');
     if (errorBody) {
       if (errors.length === 0) {
-        errorBody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted);font-size:13px">目前沒有預測判定錯誤的訂單</td></tr>`;
+        errorBody.innerHTML = _noGt
+          ? `<tr><td colspan="7" style="text-align:center;padding:32px;color:#8a6d3b;font-size:13px">待回填：本次上傳尚未回填真實 Y，無法計算預測誤差（出貨後回填即可比對）</td></tr>`
+          : `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted);font-size:13px">目前沒有預測判定錯誤的訂單</td></tr>`;
       } else {
         errorBody.innerHTML = errors.map(o => `
           <tr>
@@ -472,11 +502,12 @@ async function switchModelSubpage(which) {
     if (!_mpProfitLoaded) {
       try {
         const resp = await fetch('/static/components/profit_prediction.html');
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);   // B0-1：壞回應不注入、不鎖旗標 → 下次可重試
         profitPane.innerHTML = await resp.text();
         _mpProfitLoaded = true;
       } catch (e) {
-        profitPane.innerHTML = `<div style="color:red;padding:20px;">收益模型子頁載入失敗：${e.message}</div>`;
-        return;
+        profitPane.innerHTML = `<div style="color:red;padding:20px;">收益模型子頁載入失敗：${e.message}（請確認伺服器運行後重新整理）</div>`;
+        return;   // 注意：未設 _mpProfitLoaded=true，重新整理或再點即重抓
       }
     }
     if (window.loadProfitPrediction) loadProfitPrediction();

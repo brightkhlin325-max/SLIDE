@@ -216,7 +216,13 @@ async function loadRoiPortfolio() {
     _populateOnce('roiRegionFilter', d.filters?.regions || []);
     renderRoiScope(d.data_scope);
     renderRoiScatter(d, vAxis, rAxis);
-    renderAtRisk(d.at_risk_list || [], d);
+    // §8.2：上傳(待接單)→ 風險暴露名單切換為「接單救援」;歷史驗證集維持原樣
+    if (d.data_scope && d.data_scope.scope === 'session_upload') {
+      loadRescue();
+    } else {
+      setAtRiskMode('historical');
+      renderAtRisk(d.at_risk_list || [], d);
+    }
     const note = document.getElementById('roiScatterNote');
     if (note) {
       const fallbackRisk = d.risk_axis !== d.risk_axis_effective ? '；此資料沒有實際延遲答案，風險軸已改用 P(late)' : '';
@@ -342,7 +348,7 @@ function renderAtRisk(list, d) {
     body.innerHTML = list.map(o => `
       <tr>
         <td><span class="order-id">${o.id}</span></td>
-        <td style="font-weight:700;">${_fmtMoney(o.epar)}</td>
+        <td style="font-weight:700;color:${o.epar < 0 ? 'var(--danger)' : 'inherit'};">${_fmtMoney(o.epar)}</td>
         <td>${_fmtMoney(o.profit_actual)}</td>
         <td>${_fmtPct(o.p_late)}</td>
         <td>${o.segment}</td>
@@ -361,6 +367,79 @@ function changeAtRiskPage(delta) {
   loadRoiPortfolio();
 }
 window.changeAtRiskPage = changeAtRiskPage;
+
+// ── §8 接單救援:名單面板模式切換 + 載入/渲染 ──────────────────────────
+function setAtRiskMode(mode) {
+  const title = document.getElementById('roiAtRiskTitle');
+  const sub = document.getElementById('roiAtRiskSub');
+  const head = document.getElementById('roiAtRiskHead');
+  const summary = document.getElementById('roiRescueSummary');
+  const prev = document.getElementById('roiAtRiskPrev');
+  const pager = prev ? prev.parentElement : null;
+  if (mode === 'rescue') {
+    if (title) title.textContent = '接單救援預測 (Order Rescue)';
+    if (sub) sub.textContent = '若要接單，真價值為負的訂單需做最佳化調整：掃 運送×折扣 找把淨值救到最大的組合。';
+    if (head) head.innerHTML = '<th>訂單 (Order)</th><th>現況真價值 (Net)</th><th>建議運送 (Shipping)</th><th>建議折扣 (Discount)</th><th>救援後真價值 (Rescued Net)</th><th>決策 (Decision)</th>';
+    if (pager) pager.style.display = 'none';   // 救援為單批掃描，無分頁
+  } else {
+    if (title) title.textContent = '風險暴露名單 (At-Risk by Margin)';
+    if (sub) sub.textContent = '最該優先處理的訂單（利潤高且延遲機率高）';
+    if (head) head.innerHTML = '<th>訂單 (Order)</th><th>在險利潤 (EPAR)</th><th>帳載利潤 (Book Profit)</th><th>延遲機率 (P-late)</th><th>客群 (Segment)</th>';
+    if (summary) summary.style.display = 'none';
+    if (pager) pager.style.display = 'flex';
+  }
+}
+
+async function loadRescue() {
+  setAtRiskMode('rescue');
+  const body = document.getElementById('roiAtRiskBody');
+  if (body) body.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--muted)">救援掃描中（運送×折扣）...</td></tr>`;
+  try {
+    const d = await fetch(`${API_BASE}/api/roi/rescue`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ penalty: _roiPenalty() })
+    }).then(r => r.json());
+    renderRescue(d);
+  } catch (e) {
+    console.error('rescue', e);
+    if (body) body.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--danger)">接單救援載入失敗：${e.message}</td></tr>`;
+  }
+}
+window.loadRescue = loadRescue;
+
+function renderRescue(d) {
+  const body = document.getElementById('roiAtRiskBody');
+  const summary = document.getElementById('roiRescueSummary');
+  const count = document.getElementById('roiAtRiskCount');
+  const list = d.recommendations || [];
+  if (count) count.textContent = `${(d.negative_orders || 0).toLocaleString()} 筆待救`;
+  if (summary) {
+    summary.style.display = 'block';
+    if (d.available === false) {
+      summary.textContent = d.reason || '接單救援僅作用於上傳的待接單訂單。';
+    } else if (!list.length) {
+      summary.textContent = d.message || '本次上傳沒有真價值為負的訂單，無需救援。';
+    } else {
+      summary.innerHTML = `救援掃描：共 <b>${d.negative_orders}</b> 筆真價值為負，經 運送×折扣 最佳化後 <b>${d.rescued_to_positive}</b> 筆可轉正接單；其餘建議婉拒/重議。`;
+    }
+  }
+  if (!body) return;
+  if (!list.length) {
+    const msg = d.available === false ? (d.reason || '') : (d.message || '無待救訂單');
+    body.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--muted)">${msg}</td></tr>`;
+    return;
+  }
+  body.innerHTML = list.map(o => `
+    <tr>
+      <td><span class="order-id">${o.id}</span></td>
+      <td style="color:var(--danger);font-weight:700;">${_fmtMoney(o.base_net)}</td>
+      <td style="color:#c0392b;font-weight:700;">${o.recommend_shipping}<br><span style="font-size:10px;color:var(--muted);font-weight:400;">原：${o.current_shipping || '—'}</span></td>
+      <td style="color:#c0392b;font-weight:700;">${_fmtPct(o.recommend_discount)}</td>
+      <td style="font-weight:700;color:${o.rescued_net >= 0 ? 'var(--success)' : 'var(--danger)'};">${_fmtMoney(o.rescued_net)}</td>
+      <td style="font-size:12px;">${o.decision}</td>
+    </tr>`).join('');
+}
 
 async function loadRoiTrustMap() {
   try {

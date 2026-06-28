@@ -1,31 +1,31 @@
 {
-  "roc_auc": 0.7967,
-  "f1": 0.7023,
-  "precision": 0.86,
-  "recall": 0.5935,
-  "late_rate": 0.5483,
-  "high_risk_orders": 10246,
+  "roc_auc": 0.7751,
+  "f1": 0.7035,
+  "precision": 0.8578,
+  "recall": 0.5962,
+  "late_rate": 0.5515,
+  "high_risk_orders": 8763,
   "confusion_matrix": [
     [
-      10797,
-      1434
+      10624,
+      1470
     ],
     [
-      6035,
-      8812
+      6004,
+      8866
     ]
   ],
   "feature_importance": {
-    "Shipping Mode_Standard Class": 0.4339533746242523,
-    "Days for shipment (scheduled)": 0.2051781713962555,
-    "Shipping Mode_First Class": 0.1322852522134781,
-    "Shipping Mode_Same Day": 0.12632271647453308,
-    "Shipping Mode_Second Class": 0.019409703090786934,
-    "Type_TRANSFER": 0.017604760825634003,
-    "order_hour": 0.007212830241769552,
-    "Type_PAYMENT": 0.003291557775810361,
-    "Type_CASH": 0.0029472215101122856,
-    "Type_DEBIT": 0.002943648025393486
+    "Shipping Mode_Standard Class": 0.4710613191127777,
+    "Days for shipment (scheduled)": 0.23113006353378296,
+    "Shipping Mode_First Class": 0.1187826544046402,
+    "Shipping Mode_Same Day": 0.08803143352270126,
+    "Shipping Mode_Second Class": 0.026278648525476456,
+    "Type_TRANSFER": 0.015174285508692265,
+    "order_hour": 0.0050126793794333935,
+    "Type_CASH": 0.0027588014490902424,
+    "Type_DEBIT": 0.0027063959278166294,
+    "Type_PAYMENT": 0.0026204907335340977
   },
   "evaluation_protocol": {
     "validation_used_for_early_stopping": true,
